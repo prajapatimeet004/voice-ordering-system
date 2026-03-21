@@ -14,7 +14,10 @@ from classifier_service import classify_order, INDIAN_MENU
 from correction_service import detect_correction, process_correction
 from tts_service import generate_speech
 import response_service
-import winsound
+try:
+    import winsound
+except ImportError:
+    winsound = None
 import base64
 
 app = FastAPI(title="Voice Ordering System API")
@@ -99,7 +102,9 @@ async def classify(transcript: str = Form(...)):
             speech_b64 = generate_speech(response_text)
             if speech_b64:
                 def play_async():
-                    try: winsound.PlaySound(base64.b64decode(speech_b64), winsound.SND_MEMORY)
+                    try: 
+                        if winsound:
+                            winsound.PlaySound(base64.b64decode(speech_b64), winsound.SND_MEMORY)
                     except: pass
                 asyncio.create_task(asyncio.to_thread(play_async))
             
@@ -186,7 +191,8 @@ async def classify(transcript: str = Form(...)):
                 # Play in a separate thread so we don't block the response
                 def play_async():
                     try:
-                        winsound.PlaySound(base64.b64decode(speech_b64), winsound.SND_MEMORY)
+                        if winsound:
+                            winsound.PlaySound(base64.b64decode(speech_b64), winsound.SND_MEMORY)
                     except: pass
                 
                 asyncio.create_task(asyncio.to_thread(play_async))
@@ -221,7 +227,9 @@ async def correct(transcript: str = Form(...)):
             
             if speech_b64:
                 def play_async():
-                    try: winsound.PlaySound(base64.b64decode(speech_b64), winsound.SND_MEMORY)
+                    try: 
+                        if winsound:
+                            winsound.PlaySound(base64.b64decode(speech_b64), winsound.SND_MEMORY)
                     except: pass
                 asyncio.create_task(asyncio.to_thread(play_async))
             
