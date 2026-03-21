@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: transparent;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            padding: 10px;
+        }
+
+        .mic-btn {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: #3498db;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            transition: 0.2s;
+        }
+
+        .mic-btn.recording {
+            background: #e74c3c;
+            box-shadow: 0 0 20px rgba(231, 76, 60, 0.5);
+        }
+
+        .mic-icon {
+            fill: white;
+            width: 40px;
+            height: 40px;
+        }
+
+        .timer {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #333;
+            font-family: monospace;
+        }
+
+        .waveform-container {
+            width: 100%;
+            height: 50px;
+            background: #eee;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .status {
+            font-size: 0.8rem;
+            color: #666;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <button id="recordBtn" class="mic-btn">
+            <svg id="micIcon" class="mic-icon" viewBox="0 0 24 24">
+                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+                <path
+                    d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+            </svg>
+        </button>
+        <div id="timer" class="timer">00:00</div>
+        <div class="waveform-container"><canvas id="canvas"></canvas></div>
+        <div id="statusLabel" class="status">Initializing...</div>
+        <button id="fallbackBtn"
+            style="font-size: 0.9rem; margin-top: 10px; background: #f1c40f; border: 2px solid #f39c12; color: #000; cursor: pointer; padding: 10px 20px; border-radius: 5px; font-weight: bold; width: 100%;">⚠️
+            Click here if stuck (Signal Ready)</button>
+    </div>
+
+    <script>
+        var btn = document.getElementById('recordBtn');
+        var timerDisplay = document.getElementById('timer');
+        var canvas = document.getElementById('canvas');
+        var statusLabel = document.getElementById('statusLabel');
+        var ctx = canvas.getContext('2d');
+
+        var isRecording = false;
+        var mediaRecorder = null;
+        var audioChunks = [];
+        var startTime = null;
+        var timerInterval = null;
+        var audioCtx = null;
+        var analyser = null;
+        var dataArray = null;
+        var animationId = null;
+
+        // VAD Variables (Disabled)
+        var silenceTimer = null;
+        var MIN_RECORD_TIME = 1500;
+        var VOLUME_THRESHOLD = 30;
+
+        function sendMessage(type, data) {
+            var payload = { isStreamlitMessage: true, type: type, apiVersion: 1 };
+            for (var key in data) { payload[key] = data[key]; }
+            window.parent.postMessage(payload, '*');
+        }
+
+        var lastProps = null;
+        function signalReady() {
+            sendMessage('streamlit:componentReady', {});
+            sendMessage('streamlit:setFrameHeight', { height: 280 });
+        }
+
+        window.addEventListener('message', function (event) {
+            if (event.data.type === 'streamlit:render') {
+                var props = event.data.args;
+                console.log("VRecorder: Received props:", props);
+                // Check if autoStart is requested and we aren't already recording
+                if (props.autoStart && !isRecording && (!lastProps || !lastProps.autoStart)) {
+                    console.log("VRecorder: Auto-starting...");
+                    setTimeout(function () { if (!isRecording) btn.onclick(); }, 200);
+                }
+                lastProps = props;
+            }
+        });
+
+        var readyInterval = setInterval(signalReady, 500);
+        setTimeout(function () { clearInterval(readyInterval); }, 5000);
+        signalReady();
+        statusLabel.innerText = "Click to Start";
+
+        function updateTimer() {
+            var ms = Date.now() - startTime;
+            var sec = Math.floor(ms / 1000);
+            var m = Math.floor(sec / 60).toString().padStart(2, '0');
+            var s = (sec % 60).toString().padStart(2, '0');
+            timerDisplay.innerText = m + ":" + s;
+        }
+
+        function stopRecording() {
+            if (!isRecording) return;
+            mediaRecorder.stop();
+            isRecording = false;
+            btn.className = 'mic-btn';
+            statusLabel.innerText = "Processing...";
+            clearInterval(timerInterval);
+            cancelAnimationFrame(animationId);
+            if (silenceTimer) clearTimeout(silenceTimer);
+        }
+
+        btn.onclick = function () {
+            if (!isRecording) {
+                navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    analyser = audioCtx.createAnalyser();
+                    var source = audioCtx.createMediaStreamSource(stream);
+                    source.connect(analyser);
+                    analyser.fftSize = 64;
+                    dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+                    mediaRecorder.ondataavailable = function (e) { if (e.data.size > 0) audioChunks.push(e.data); };
+                    mediaRecorder.onstop = function () {
+                        var blob = new Blob(audioChunks, { type: 'audio/wav' });
+                        var reader = new FileReader();
+                        reader.readAsDataURL(blob);
+                        reader.onloadend = function () {
+                            sendMessage('streamlit:setComponentValue', { value: reader.result });
+                        };
+                        stream.getTracks().forEach(function (t) { t.stop(); });
+                        audioCtx.close();
+                    };
+
+                    mediaRecorder.start();
+                    isRecording = true;
+                    btn.className = 'mic-btn recording';
+                    statusLabel.innerText = "Listening... (Click mic to stop)";
+                    startTime = Date.now();
+                    timerInterval = setInterval(updateTimer, 100);
+                    drawWaveform();
+                }).catch(function (err) {
+                    statusLabel.innerText = "Mic Error: " + err.message;
+                });
+            } else {
+                stopRecording();
+            }
+        };
+
+        function drawWaveform() {
+            animationId = requestAnimationFrame(drawWaveform);
+            analyser.getByteFrequencyData(dataArray);
+
+            var sum = 0;
+            for (var j = 0; j < dataArray.length; j++) { sum += dataArray[j]; }
+            var avg = sum / dataArray.length;
+            var elapsed = Date.now() - startTime;
+
+            // Silence detection disabled
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = avg > VOLUME_THRESHOLD ? '#e74c3c' : '#3498db';
+            var barWidth = canvas.width / 32;
+            for (var i = 0; i < 32; i++) {
+                var val = dataArray[i];
+                var h = (val / 255) * canvas.height;
+                ctx.fillRect(i * barWidth, canvas.height - h, barWidth - 2, h);
+            }
+        }
+
+        document.getElementById('fallbackBtn').onclick = signalReady;
+        function resize() { canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight; }
+        window.onresize = resize; resize();
+    </script>
+</body>
+
+</html>

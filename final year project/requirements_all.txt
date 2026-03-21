@@ -1,0 +1,26 @@
+# --- Core Streamlit UI ---
+streamlit
+audio-recorder-streamlit
+
+# --- External AI & LLM APIs ---
+sarvamai
+groq
+python-dotenv
+
+# --- Audio Processing & Recording ---
+sounddevice
+numpy
+scipy
+noisereduce
+pydub
+soundfile
+
+# --- Machine Learning & NLP (VAD + Embeddings) ---
+torch
+torchaudio
+onnxruntime
+sentence-transformers
+rapidfuzz
+
+# --- Compatibility & Polyfills ---
+audioopy
