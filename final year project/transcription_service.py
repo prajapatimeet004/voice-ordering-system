@@ -12,12 +12,16 @@ if not API_KEY:
     raise ValueError("❌ SARVAM_API_KEY not found in .env")
 
 _sarvam_client = None
+_sarvam_loop = None
 
 def get_sarvam_client():
-    global _sarvam_client
-    if _sarvam_client is None:
+    global _sarvam_client, _sarvam_loop
+    current_loop = asyncio.get_event_loop()
+    # Create a new client if the event loop has changed (e.g. new asyncio.run())
+    if _sarvam_client is None or _sarvam_loop is not current_loop:
         from sarvamai import AsyncSarvamAI
         _sarvam_client = AsyncSarvamAI(api_subscription_key=API_KEY)
+        _sarvam_loop = current_loop
     return _sarvam_client
 
 async def close_client():

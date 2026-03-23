@@ -47,7 +47,7 @@ CORRECTION_DICT = {
         "e nathi", "pela valu nahi", "sachu karo", "sudharjo", "ena badle", "badli do",
         # English
         "no no", "not that", "change it", "replace it", "instead", "wrong",
-        "modify", "update it", "i mean", "sorry", "change karo"
+        "modify", "update it", "i mean", "sorry", "change karo", "rakhna", "rakhjo", "kar dena", "kari dejo"
     ],
     "remove": [
         # Hindi
@@ -66,26 +66,25 @@ CORRECTION_DICT = {
         # Hindi
         "ek nahi", "do karo", "teen karo", "char karo", "quantity badhao",
         "quantity kam karo", "aur ek", "sirf ek", "zyada karo", "kam karo",
-        "aur", "aur ek", "ek aur", "do aur", "extra", "add karo", "aur add karo", 
-        "ek aur add karo", "thoda extra", "extra daal do", "extra laga do", "aur daal do", 
+        "ek aur add karo", "thoda extra daal do", "extra daal do", "extra laga do", "aur daal do", 
         "ek aur bhej do", "ek aur laga do", "aur kar do", "ek aur plate", "ek aur item", 
         "badha do", "quantity badha do", "ek badha do", "do kar do", "teen kar do", 
         "chaar kar do", "paanch kar do", "do bana do", "teen bana do", "chaar bana do", 
         "quantity do kar do", "plate do kar do",
         # Gujarati
         "ek nahi be", "be karo", "tran karo", "quantity vadharo",
-        "quantity ochi karo", "vadhu aapo", "ochu karo", "biju ek",
-        "vadhare", "vadhu", "biju", "extra", "add", "thodi vadhari do", 
+        "quantity ochi karo", "vadhu aapo", "ochu karo",
+        "thodi vadhari do", 
         "thodu vadhu muki do", "ek aur nakho", "thodi add karo", "ek plate vadhaari do", 
-        "ek biju aapona na", "be karo", "tran karo", "char karo", "panch karo", 
+        "ek biju aapona na", "char karo", "panch karo", 
         "be kari do", "tran kari do", "char kari do", "quantity be karo", "be plate karo",
-        "thodu vadhare", "ek vadhare", "be vadhare", "vadhari do", "ek add karo", 
-        "ek aur add karo", "thodu extra", "extra muki do", "thodu vadhu", "biju ek", 
-        "biju ek muki do", "ek biju", "ek aur muki do", "thodu aur", "thodu vadhu kari do", 
+        "ek vadhare", "be vadhare", "vadhari do", "ek add karo", 
+        "ek aur add karo", "thodu extra muki do", "extra muki do", 
+        "biju ek muki do", "ek aur muki do", "thodu vadhu kari do", 
         "ek plate vadhare", "ek item vadhare",
         # English
         "make it two", "make it three", "change to two", "increase quantity",
-        "decrease quantity", "add one more", "only one", "extra", "add"
+        "decrease quantity", "add one more", "only one"
     ],
     "cancel_all": [
         # Hindi
@@ -127,7 +126,7 @@ def get_embedding_model():
         
     return _embedding_model, _all_correction_phrases, _correction_embeddings
 
-def detect_correction(transcript: str, threshold=0.70):
+def detect_correction(transcript: str, threshold=0.82):
     """
     Checks if the transcript contains any intent similar to correction keywords 
     using a Hybrid approach: 60% Semantic + 40% Fuzzy Keywords.
@@ -247,9 +246,16 @@ def process_correction(transcript: str, current_order_items=None):
         )
 
         result_content = response.choices[0].message.content
+        if not result_content or not result_content.strip():
+            print("WARNING: Sarvam API returned empty response for correction processing.")
+            return []
         # Extract JSON from potential <think> or ``` markdown blocks
         clean_json = extract_json(result_content)
-        corrections = json.loads(clean_json).get("corrections", [])
+        try:
+            corrections = json.loads(clean_json).get("corrections", [])
+        except json.JSONDecodeError as json_err:
+            print(f"WARNING: Could not parse correction JSON: {json_err}. Raw: {result_content[:200]}")
+            return []
         
         # Enhance corrections with matching scores and addons
         # from classifier_service import match_addon_hybrid # This import was already present in the original, keeping it.

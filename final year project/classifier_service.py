@@ -112,7 +112,7 @@ NUMBER_MAP = {
     "fifty nine": 59, "unsath": 59,
 
     # 60–69
-    "sixty": 60, "saath": 60,
+    "sixty": 60,
     "sixty one": 61, "iksath": 61,
     "sixty two": 62, "basath": 62,
     "sixty three": 63, "tirsath": 63,
@@ -217,8 +217,9 @@ INDIAN_MENU = [
 ]
 
 # ADDON CONFIGURATION
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 try:
-    with open("addons.json", "r", encoding="utf-8") as f:
+    with open(os.path.join(_SCRIPT_DIR, "addons.json"), "r", encoding="utf-8") as f:
         ADDON_MODIFIERS = json.load(f)
 except FileNotFoundError:
     print("WARNING: addons.json not found. Using empty addon dictionary.")
@@ -365,7 +366,10 @@ def classify_order(transcript: str):
     system_prompt = f"""
     You are a professional restaurant ordering assistant. 
     Your task is to take a transcript of a customer's voice order and 
-    extract the dishes, their quantities, and any specific customizations (addons).
+    extract the dishes, their quantities, or answer questions about menu availability.
+
+    AVAILABLE MENU:
+    {', '.join(INDIAN_MENU)}
 
     AVAILABLE ADDON CATEGORIES:
     {addon_context}
@@ -396,7 +400,7 @@ def classify_order(transcript: str):
            {{"dish": "string", "quantity": integer, "raw_addons": ["string"]}}
          ],
          "is_finished": boolean (default false),
-         "intent": "affirmative" | "negative" | null (default null),
+         "intent": "affirmative" | "negative" | "inquiry" | null (default null),
          "response_text": "string",
          "language_code": "hi-IN" | "gu-IN" | "en-IN" | "mr-IN" | "ta-IN" | etc.
        }}
@@ -407,33 +411,30 @@ def classify_order(transcript: str):
         - "quantity": integer (default 1)
         - "raw_addons": list of strings (phrases used for customization from transcript, EXACTLY as spoken, PRESERVE Gujarati/Hindi, NO TRANSLATION)
         - "is_finished": true only if "done", "bus", etc. detected.
-        - "intent": "affirmative" if "yes", "haan" etc. detected; "negative" if "no", "nahi" etc. detected.
+        - "intent": "affirmative" if "yes", "haan" etc. detected; "negative" if "no", "nahi" etc. detected; "inquiry" for questions.
         - "response_text": A friendly, concierge-like response from 'Pooja' in the SAME language as the transcript. (e.g., "Theek hai, aapka order..." or "Saru, tamaro order...").
         - "language_code": The Sarvam AI language code for the transcript (gu-IN for Gujarati, hi-IN for Hindi, en-IN for English, mr-IN for Marathi).
-
-    EXAMPLES (STUDY THESE CAREFULLY):
-    - [Transcript]: "ek masala dosa dungli vagar nu and thodu vadhu tikhu"
-      [Correct Output]: {{"items": [{{"dish": "masala dosa", "quantity": 1, "raw_addons": ["dungli vagar nu", "thodu vadhu tikhu"]}}]}}
-    
-    - [Transcript]: "paneer tikka sathe extra chutney aapjo"
-      [Correct Output]: {{"items": [{{"dish": "paneer tikka", "quantity": 1, "raw_addons": ["extra chutney aapjo"]}}]}}
-    
-    - [Transcript]: "Mohan Josh ane 10 Nan"
-      [Correct Output]: {{"items": [{{"dish": "Mohan Josh", "quantity": 1, "raw_addons": []}}, {{"dish": "Nan", "quantity": 10, "raw_addons": []}}]}}
-    10. SUB-ITEMS AS ADDONS: Items like 'Bhature', 'Pav', 'Puri', 'Sambar', 'Chutney', 'Papad', 'Raita' are often components of other dishes. If they are mentioned immediately AFTER a main dish (like Chole Bhature, Pav Bhaji, etc.), extract them in the `raw_addons` of that main dish, even if they have a quantity.
-        - Example: "Chole Bhature ane ek Bhature" -> dish: "Chole Bhature", raw_addons: ["ek Bhature"]
-        - Example: "Pav Bhaji sathe 2 Pav" -> dish: "Pav Bhaji", raw_addons: ["2 Pav"]
 
     11. FINISHING INTENT: Detect if the user is finished with the entire order. 
         - Indicators: "done", "ok", "bus", "ajj", "bas", "bas itna hi", "bas ho gaya", "finish", "no more", "itna hi chahiye".
         - If detected, set a top-level boolean key "is_finished" to true.
-
+ 
     12. CONFIRMATION INTENT: Detect if the user is saying "yes" or "no" to a previous question.
         - Yes Indicators: "yes", "ha", "haan", "haji", "ok", "theek hai", "sahi hai", "correct", "yep", "yeah".
         - No Indicators: "no", "nahi", "na", "naji", "galat", "wrong", "nope".
         - If "yes" detected, set "intent" to "affirmative". If "no", set "intent" to "negative".
-
+ 
     13. PERSONA (POOJA): You are Pooja, a warm and efficient restaurant concierge. Speak naturally and politely.
+ 
+    14. MULTIPLE ITEMS IN A LIST: Often customers will list items one after another without using separators like "and". 
+        - CRITICAL: A number/quantity followed by a dish name (e.g., "1 samosa 2 tea") is a DEFINITIVE indicator of a new item. 
+        - Ensure EVERY item mentioned is extracted into the "items" list. Do not omit any items.
+
+    15. MENU INQUIRIES & QUESTIONS: If the user asks if a dish is available (e.g., "Do you have Paneer Tikka?", "Is there any Sushi?", "Chai milegi?"):
+        - Check the dish against the "AVAILABLE MENU" provided.
+        - If available: Set "intent" to "inquiry" and "response_text" to a warm confirmation in the user's language (e.g., "Haan ji, Paneer Tikka available hai. Kya aap order karna chahenge?").
+        - If NOT available: Set "intent" to "inquiry" and "response_text" to a polite rejection (e.g., "I'm sorry, Sushi hamare menu mein nahi hai. Kya main aapko kuch aur suggest karun?").
+        - CRITICAL: Do NOT add the dish to the "items" list if they are only asking "Do you have...". Include it in "items" ONLY if they explicitly say "give me", "order", "lao", etc.
 
     CRITICAL: ALWAYS extract the QUANTITY as a separate integer. NEVER include "10", "one", "ek", etc. in the "dish" string.
     """
@@ -465,7 +466,9 @@ def classify_order(transcript: str):
             "needs_confirmation": [],
             "not_in_menu": [],
             "is_finished": is_finished,
-            "intent": intent
+            "intent": intent,
+            "response_text": parsed_data.get("response_text", ""),
+            "language_code": parsed_data.get("language_code", "hi-IN")
         }
 
         for item in extracted_data:

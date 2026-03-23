@@ -146,9 +146,25 @@ async def classify(transcript: str = Form(...)):
 
         elif result.get("confirmed"):
             # New items confirmed directly
+            import re
+            
+            # Smart Merging Logic:
+            # If an item already exists, only increment quantity if an explicit indicator is found.
+            # Indicators: digits (\d) or explicit additive words.
+            additive_keywords = ["aur", "extra", "more", "vadhare", "jyada", "add", "plus", "also", "biju", "vadhari", "vadhu", "another", "एक और", "बीजूं", "वधारे"]
+            
+            has_explicit_indicator = bool(re.search(r'\d', transcript)) or \
+                                   any(kw in transcript.lower() for kw in additive_keywords)
+            
             for dish, data in result["confirmed"].items():
                 if dish in current_order_state["confirmed"]:
-                    current_order_state["confirmed"][dish]["quantity"] += data["quantity"]
+                    if has_explicit_indicator:
+                        current_order_state["confirmed"][dish]["quantity"] += data["quantity"]
+                        print(f"DEBUG: Explicit indicator found. Incrementing {dish} to {current_order_state['confirmed'][dish]['quantity']}")
+                    else:
+                        print(f"DEBUG: No explicit indicator. Merging addons for {dish} without incrementing quantity.")
+                    
+                    # Always merge addons
                     current_order_state["confirmed"][dish]["addons"] = list(set(current_order_state["confirmed"][dish]["addons"] + data.get("addons", [])))
                 else:
                     current_order_state["confirmed"][dish] = data

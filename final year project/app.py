@@ -108,11 +108,18 @@ if "is_listening" not in st.session_state:
     st.session_state.is_listening = True
 
 def reset_order():
+    """Completely resets the frontend and backend order state."""
+    try:
+        httpx.post(f"{API_URL}/order/reset", timeout=5.0)
+    except:
+        pass # Backend might already be reset or unreachable
     st.session_state.classification_result = {"confirmed": {}, "needs_confirmation": [], "not_in_menu": []}
     st.session_state.recording_history = []
     st.session_state.pending_corrections = []
-    if "last_audio_id" in st.session_state: del st.session_state.last_audio_id
-    st.session_state.last_speech = None # Clear last speech on reset
+    if "last_audio_id" in st.session_state: 
+        del st.session_state.last_audio_id
+    st.session_state.last_speech = None
+    st.session_state.recorder_key += 1 # Force refresh the recorder component
     st.rerun()
 
 async def run_workflow(audio_bytes):
@@ -172,10 +179,7 @@ with st.sidebar:
         if st.button("🔊 Replay Last Response"):
             play_voice(st.session_state.last_speech)
     if st.button("🗑️ Reset Order", type="primary"):
-        httpx.post(f"{API_URL}/order/reset")
-        st.session_state.classification_result = {"confirmed": {}, "needs_confirmation": [], "not_in_menu": []}
-        st.session_state.last_speech = None
-        st.rerun()
+        reset_order()
     
     st.divider()
     st.write("Capture Noise Profile:")
