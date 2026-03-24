@@ -14,6 +14,7 @@ from classifier_service import classify_order, INDIAN_MENU
 from correction_service import detect_correction, process_correction
 from tts_service import generate_speech
 import response_service
+import inventory_service
 try:
     import winsound
 except ImportError:
@@ -84,37 +85,43 @@ async def classify(transcript: str = Form(...)):
             
             # Apply corrections to current_order_state
             from ordering_workflow import apply_confirmed_corrections
-            current_order_state["confirmed"] = apply_confirmed_corrections(current_order_state["confirmed"], corrections)
+            new_confirmed, changed = apply_confirmed_corrections(current_order_state["confirmed"].copy(), corrections)
             
-            # Determine feedback text
-            # If it was a removal, mention it.
-            response_text = "Theek hai, I've updated your order."
-            if corrections:
-                c = corrections[0]
-                action = c.get("action")
-                dish = c.get("dish") or c.get("original_dish")
-                if action == "remove":
-                    response_text = f"Theek hai, {dish} remove kar diya hai."
-                elif action == "cancel_all":
-                    response_text = "Theek hai, pura order cancel kar diya hai."
-            
-            # Generate and Play TTS
-            speech_b64 = generate_speech(response_text)
-            if speech_b64:
-                def play_async():
-                    try: 
-                        if winsound:
-                            winsound.PlaySound(base64.b64decode(speech_b64), winsound.SND_MEMORY)
-                    except: pass
-                asyncio.create_task(asyncio.to_thread(play_async))
-            
-            return {
-                "classification": {"confirmed": {}, "needs_confirmation": [], "not_in_menu": [], "is_finished": False, "intent": "correction"},
-                "response_text": response_text,
-                "speech": speech_b64,
-                "current_order": current_order_state["confirmed"],
-                "is_finished": False
-            }
+            if (changed) or (corrections and corrections[0].get("action") == "cancel_all"):
+                # Something was actually changed! Commit it and return.
+                current_order_state["confirmed"] = new_confirmed
+                
+                # Determine feedback text
+                response_text = "Theek hai, I've updated your order."
+                if corrections:
+                    c = corrections[0]
+                    action = c.get("action")
+                    dish = c.get("dish") or c.get("original_dish")
+                    if action == "remove":
+                        response_text = f"Theek hai, {dish} remove kar diya hai."
+                    elif action == "cancel_all":
+                        response_text = "Theek hai, pura order cancel kar diya hai."
+                
+                # Generate and Play TTS
+                speech_b64 = generate_speech(response_text)
+                if speech_b64:
+                    def play_async():
+                        try: 
+                            if winsound:
+                                winsound.PlaySound(base64.b64decode(speech_b64), winsound.SND_MEMORY)
+                        except: pass
+                    asyncio.create_task(asyncio.to_thread(play_async))
+                
+                return {
+                    "classification": {"confirmed": {}, "needs_confirmation": [], "not_in_menu": [], "is_finished": False, "intent": "correction"},
+                    "response_text": response_text,
+                    "speech": speech_b64,
+                    "current_order": current_order_state["confirmed"],
+                    "is_finished": False
+                }
+            else:
+                print("DEBUG: Correction detected but no valid items affected. Falling back to regular classification.")
+                # Proceed to regular classification...
 
         # --- Regular Classification ---
         result = classify_order(transcript)
@@ -144,34 +151,56 @@ async def classify(transcript: str = Form(...)):
             current_order_state["pending_confirmation"] = None
             response_text = "Theek hai, I won't add that. What else would you like?"
 
-        elif result.get("confirmed"):
-            # New items confirmed directly
-            import re
+        elif result.get("items"):
+            # Load inventory for explicit server-side check
+            from classifier_service import fuzzy_match_dish
             
-            # Smart Merging Logic:
-            # If an item already exists, only increment quantity if an explicit indicator is found.
-            # Indicators: digits (\d) or explicit additive words.
-            additive_keywords = ["aur", "extra", "more", "vadhare", "jyada", "add", "plus", "also", "biju", "vadhari", "vadhu", "another", "एक और", "बीजूं", "वधारे"]
-            
-            has_explicit_indicator = bool(re.search(r'\d', transcript)) or \
-                                   any(kw in transcript.lower() for kw in additive_keywords)
-            
-            for dish, data in result["confirmed"].items():
-                if dish in current_order_state["confirmed"]:
-                    if has_explicit_indicator:
-                        current_order_state["confirmed"][dish]["quantity"] += data["quantity"]
-                        print(f"DEBUG: Explicit indicator found. Incrementing {dish} to {current_order_state['confirmed'][dish]['quantity']}")
-                    else:
-                        print(f"DEBUG: No explicit indicator. Merging addons for {dish} without incrementing quantity.")
+            # New items or modifications
+            for item in result["items"]:
+                dish_name = item["dish"]
+                qty = item.get("quantity", 1)
+                portion = item.get("portion", "full")
+                modifier = item.get("modifier", "set")
+                addons = item.get("raw_addons", [])
+                
+                # Standardize dish name using fuzzy matching against inventory
+                matched_dish, score = fuzzy_match_dish(dish_name)
+                final_dish_name = matched_dish if score > 0.8 else dish_name
+                
+                # Check Availability using standardized name
+                is_available, stock = inventory_service.check_availability(final_dish_name, qty)
+                if not is_available:
+                    print(f"DEBUG: {final_dish_name} is OUT OF STOCK (Stock: {stock}). Not adding to state.")
+                    # We continue to let the LLM handle the "out of stock" response if it already did
+                    # but we don't add it to the confirmed state.
+                    if stock <= 0:
+                        continue
+                
+                # State update logic
+                state_key = f"{portion} {final_dish_name}" if portion != "full" else final_dish_name
+                
+                if state_key in current_order_state["confirmed"]:
+                    if modifier == "increase":
+                        current_order_state["confirmed"][state_key]["quantity"] += qty
+                    elif modifier == "decrease":
+                        new_qty = current_order_state["confirmed"][state_key]["quantity"] - qty
+                        if new_qty <= 0:
+                            del current_order_state["confirmed"][state_key]
+                        else:
+                            current_order_state["confirmed"][state_key]["quantity"] = new_qty
+                    else: # "set"
+                        current_order_state["confirmed"][state_key]["quantity"] = qty
                     
-                    # Always merge addons
-                    current_order_state["confirmed"][dish]["addons"] = list(set(current_order_state["confirmed"][dish]["addons"] + data.get("addons", [])))
+                    if state_key in current_order_state["confirmed"]:
+                        current_order_state["confirmed"][state_key]["addons"] = list(set(current_order_state["confirmed"][state_key]["addons"] + addons))
                 else:
-                    current_order_state["confirmed"][dish] = data
+                    if modifier != "decrease":
+                        current_order_state["confirmed"][state_key] = {"dish": state_key, "quantity": qty, "addons": addons}
             
-            # Generate response
-            confirmed_list = [{"dish": d, "quantity": v["quantity"]} for d, v in result["confirmed"].items()]
-            response_text = response_service.get_item_confirmed_text(confirmed_list)
+            response_text = result.get("response_text", "")
+            if not response_text:
+                confirmed_list = [{"dish": d, "quantity": v["quantity"]} for d, v in current_order_state["confirmed"].items()]
+                response_text = response_service.get_item_confirmed_text(confirmed_list)
             
             # Check for concurrent suggestions
             if result.get("needs_confirmation"):
@@ -266,6 +295,64 @@ async def reset_order():
     current_order_state["confirmed"] = {}
     current_order_state["pending_confirmation"] = None
     return {"message": "Order reset successfully"}
+
+@app.post("/order/submit")
+async def submit_order():
+    """
+    Submits the current order, decreases inventory stock, and resets the session.
+    """
+    if not current_order_state["confirmed"]:
+        raise HTTPException(status_code=400, detail="No items in the order to submit.")
+    
+    order_items = current_order_state["confirmed"]
+    detailed_results = []
+    
+    # Process each item in the order
+    for item_key, item_data in order_items.items():
+        # item_key might be "half Masala Dosa" or just "Masala Dosa"
+        # We need the base dish name for inventory
+        dish_name = item_data.get("dish")
+        qty = item_data.get("quantity", 1)
+        
+        # Standardize naming if it has portions (inventory usually tracks base items)
+        # However, for this demo, we assume the dish_name in state matches inventory keys
+        # If it doesn't, we'd need a mapping or fuzzy match here too.
+        
+        success = inventory_service.update_stock(dish_name, -qty)
+        detailed_results.append({"dish": dish_name, "quantity": qty, "success": success})
+    
+    # Reset state after submission
+    current_order_state["confirmed"] = {}
+    current_order_state["pending_confirmation"] = None
+    
+    return {
+        "message": "Order submitted successfully!",
+        "order_summary": order_items,
+        "inventory_updates": detailed_results
+    }
+
+@app.get("/inventory/status")
+async def get_inventory_status():
+    """Returns the current inventory status."""
+    return inventory_service.load_inventory()
+
+@app.post("/inventory/update")
+async def update_inventory(dish_name: str = Form(...), change: int = Form(...)):
+    """Manually updates the stock for a dish."""
+    success = inventory_service.update_stock(dish_name, change)
+    if success:
+        return {"message": f"Updated {dish_name} stock by {change}.", "new_stock": inventory_service.get_stock(dish_name)}
+    else:
+        raise HTTPException(status_code=404, detail=f"Dish '{dish_name}' not found in inventory.")
+
+@app.post("/inventory/availability")
+async def toggle_availability(dish_name: str = Form(...), available: bool = Form(...)):
+    """Manually toggles availability for a dish."""
+    success = inventory_service.toggle_availability(dish_name, status=available)
+    if success:
+        return {"message": f"Toggled {dish_name} availability to {available}.", "stock": inventory_service.get_stock(dish_name)}
+    else:
+        raise HTTPException(status_code=404, detail=f"Dish '{dish_name}' not found in inventory.")
 
 if __name__ == "__main__":
     import uvicorn

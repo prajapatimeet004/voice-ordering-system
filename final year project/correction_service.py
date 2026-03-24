@@ -126,7 +126,7 @@ def get_embedding_model():
         
     return _embedding_model, _all_correction_phrases, _correction_embeddings
 
-def detect_correction(transcript: str, threshold=0.82):
+def detect_correction(transcript: str, threshold=0.90):
     """
     Checks if the transcript contains any intent similar to correction keywords 
     using a Hybrid approach: 60% Semantic + 40% Fuzzy Keywords.
@@ -211,6 +211,9 @@ def process_correction(transcript: str, current_order_items=None):
     7. If the user mentions adding a new item within a correction (e.g., "Ek dal makhani karo"), use action: 'modify', original_dish: '', new_dish: 'dal makhani', quantity: 1, is_relative: false.
     8. ADDON INDICATORS: If you see any of the "with" indicator words listed above (e.g., "sathe", "ke saath", "with"), the phrase following it MUST be extracted into 'raw_addons'. PRESERVE ORIGINAL LANGUAGE.
     9. 'raw_addons': Extract phrases like "extra spicy", "no onion", "thodu vadhu tikhu". Keep original language words. EXACTLY AS SPOKEN.
+    10. CRITICAL: INCLUDE ALL ITEMS. If the customer mentions multiple items (e.g., "Ek burger, ek chai..."), EVERY item must be represented in the "corrections" list. 
+        - For items with no modifications, use action: 'modify', dish: '[item name]', quantity: [qty], raw_addons: [].
+        - NEVER omit an item just because it doesn't have a correction. If it's in the transcript, it MUST be in the JSON.
     
     Output ONLY a clean JSON object with a key "corrections" which is a LIST of objects.
     
@@ -225,6 +228,13 @@ def process_correction(transcript: str, current_order_items=None):
     - correction_found: boolean
 
     EXAMPLES:
+    - [Transcript]: "Ek burger, ek chai, thoda masala dosa spicy rakhjo"
+      [Correct Output]: {{"corrections": [
+          {{"action": "modify", "dish": "burger", "quantity": 1, "is_relative": false, "raw_addons": [], "correction_found": true}},
+          {{"action": "modify", "dish": "chai", "quantity": 1, "is_relative": false, "raw_addons": [], "correction_found": true}},
+          {{"action": "modify", "dish": "masala dosa", "quantity": 1, "is_relative": false, "raw_addons": ["spicy"], "correction_found": true}}
+      ]}}
+
     - [Transcript]: "masala dosa nahi be coffee aapo"
       [Correct Output]: {{"corrections": [{{"action": "modify", "original_dish": "masala dosa", "new_dish": "coffee", "quantity": 2, "is_relative": false, "raw_addons": [], "correction_found": true}}]}}
     

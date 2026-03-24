@@ -13,6 +13,8 @@ SARVAM_API_KEY = os.getenv("SARVAM_API_KEY")
 if not SARVAM_API_KEY:
     raise ValueError("❌ SARVAM_API_KEY not found in .env")
 
+import inventory_service
+
 _sarvam_client = None
 
 def get_sarvam_client():
@@ -25,18 +27,28 @@ def get_sarvam_client():
 def extract_json(text):
     """
     Robustly extract JSON from text that might contain markdown blocks and <think> tags.
+    Handles common LLM mistakes like trailing commas.
     """
     # Remove <think> blocks
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    
     # Try to find JSON block
     match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
     if match:
-        return match.group(1)
-    # If no markdown, try to find the first { and last }
-    match = re.search(r'(\{.*\})', text, re.DOTALL)
-    if match:
-        return match.group(1)
-    return text.strip()
+        text = match.group(1)
+    else:
+        # If no markdown, try to find the first { and last }
+        match = re.search(r'(\{.*\})', text, re.DOTALL)
+        if match:
+            text = match.group(1)
+        else:
+            text = text.strip()
+            
+    # Clean up common malformed JSON issues
+    # 1. Remove trailing commas before closing braces/brackets
+    text = re.sub(r',\s*([\]}])', r'\1', text)
+    # 2. Basic cleanup for any other weirdness
+    return text
 
 # Custom Number Map for English, Hindi, and Gujarati
 NUMBER_MAP = {
@@ -227,13 +239,8 @@ except FileNotFoundError:
     print("WARNING: addons.json not found. Using empty addon dictionary.")
     ADDON_MODIFIERS = {}
 
-# Load Kitchen Inventory
-try:
-    with open(os.path.join(_SCRIPT_DIR, "inventory.json"), "r", encoding="utf-8") as f:
-        KITCHEN_INVENTORY = json.load(f)
-except FileNotFoundError:
-    print("WARNING: inventory.json not found. Using empty inventory.")
-    KITCHEN_INVENTORY = {}
+# Kitchen Inventory is now handled via inventory_service
+# KITCHEN_INVENTORY = inventory_service.load_inventory()
 
 # Restaurant Policy / Meta Info
 RESTAURANT_INFO = {
@@ -407,28 +414,39 @@ def classify_order(transcript: str):
     CRITICAL RULES (STRICT ADHERENCE REQUIRED):
     1. NEVER TRANSLATE ANY WORD INTO ENGLISH. If the user speaks in Gujarati, Hindi, or any other language, you MUST keep the dish name and the raw_addons EXACTLY as they appear in the transcript.
     2. DO NOT "CORRECT" OR "ALIENATE" THE LANGUAGE. If the user says "tikhu", do not write "spicy". If the user says "dungli", do not write "onion".
-    3. THE ONLY PART THAT SHOULD BE ENGLISH IS THE JSON KEYS ("dish", "quantity", "raw_addons").
+    3. THE ONLY PART THAT SHOULD BE ENGLISH IS THE JSON KEYS ("dish", "quantity", "portion", "modifier", "raw_addons").
     4. SEPARATE CUSTOMIZATION FROM DISH: The pattern is usually [Dish Name] -> [Add-on/Modifier]. For example, "biryani ma thodu vadhu tikhu rakho", the dish is "biryani" and the addon phrase "thodu vadhu tikhu" goes into "raw_addons".
     5. MULTIPLE ITEMS: If you see "ITEM SEPARATORS" (like "ane", "aur", "and", "plus"), the words following them are usually a NEW DISH, not an addon. 
        - ESPECIALLY if the following words contain a QUANTITY (e.g., "10 nan"), it MUST be treated as a separate dish.
     6. ADDON INDICATORS: If you see any of the "ADDON INDICATORS" (e.g., "sathe", "ke saath", "with"), AND it DOES NOT have a quantity following it, then the phrase following it is an addon.
     7. DISHES LIKE NAAN/ROTI: "Naan", "Roti", "Papad", "Chai" are almost always SEPARATE DISHES, not addons. Even if someone says "Curry sathe 2 Pan Naan", the "2 Pan Naan" is a separate item.
     8. CONTEXTUAL MODIFICATIONS MUST MERGE: If a user mentions the same dish multiple times specifically to add a modifier to it (e.g. "masala dosa... masala dosa thoda tikka rakhjo"), DO NOT increase the quantity. Instead, merge the modifier into the initial dish object and keep the quantity as 1.
-    9. Output ONLY a clean JSON object with the following structure:
+    9. PORTIONS & MODIFIERS:
+       - portions: "half", "quarter", "full", "ardhu" (half), "pav" (quarter), "ek" (single/full).
+       - modifiers: "vadhare" (more/increase), "ochu" (less/decrease), "ek vadhari do" (+1), "ek ochu karo" (-1).
+    10. Output ONLY a clean JSON object with the following structure:
        {{
          "items": [
-           {{"dish": "string", "quantity": integer, "raw_addons": ["string"]}}
+           {{
+             "dish": "string", 
+             "quantity": integer (default 1), 
+             "portion": "full" | "half" | "quarter" (default "full"),
+             "modifier": "set" | "increase" | "decrease" (default "set"),
+             "raw_addons": ["string"]
+           }}
          ],
          "is_finished": boolean (default false),
          "intent": "affirmative" | "negative" | "inquiry" | null (default null),
          "response_text": "string",
-         "language_code": "hi-IN" | "gu-IN" | "en-IN" | "mr-IN" | "ta-IN" | etc.
+         "language_code": "hi-IN" | "gu-IN" | "en-IN" etc.
        }}
     
-    10. Rules for Fields:
+    11. Rules for Fields:
         - "items": List of dishes extracted.
-        - "dish": string (EXACTLY from transcript, PRESERVE Gujarati/Hindi, NO TRANSLATION)
+        - "dish": string (EXACTLY from transcript, PRESERVE local language)
         - "quantity": integer (default 1)
+        - "portion": string ("half", "quarter", "full") - Detect from words like "pav", "ardhu", "half".
+        - "modifier": "increase" if words like "vadhare" or "extra" used; "decrease" if "ochu" or "ocho" used; else "set".
         - "raw_addons": list of strings (phrases used for customization from transcript, EXACTLY as spoken, PRESERVE Gujarati/Hindi, NO TRANSLATION)
         - "is_finished": true only if "done", "bus", etc. detected.
         - "intent": "affirmative" if "yes", "haan" etc. detected; "negative" if "no", "nahi" etc. detected; "inquiry" for questions.
@@ -450,16 +468,25 @@ def classify_order(transcript: str):
         - CRITICAL: A number/quantity followed by a dish name (e.g., "1 samosa 2 tea") is a DEFINITIVE indicator of a new item. 
         - Ensure EVERY item mentioned is extracted into the "items" list. Do not omit any items.
 
-    15. KITCHEN INVENTORY & MENU INQUIRIES: 
-        - Use this KITCHEN_INVENTORY to check availability: {json.dumps(KITCHEN_INVENTORY)}
-        - If item available (stock > 0): Set "intent" to "inquiry" and confirm (e.g., "Haan ji, [Dish] available chhe. Ketla plate laavu?").
-        - If NOT available (stock == 0): Suggest the 'alternative' from the inventory (e.g., "[Dish] available nathi, pan [Alternative] try karso?").
-        - If quantity exceeds stock: Suggest max possible (e.g., "5 available nathi, have 2 j chhe. 2 moklu?").
+    15. KITCHEN INVENTORY & MULTI-ITEM AVAILABILITY: 
+        - Use this KITCHEN_INVENTORY to check availability: {json.dumps(inventory_service.load_inventory())}
+        - If Multiple Items Ordered: For EVERY item mentioned, check availability separately.
+        - In "response_text", explicitly tell the user about each item's status.
+          - Example: If ordering Samosa (available) and Pizza (not available): "Haan ji, Samosa available chhe, pan Pizza nathi. Pizza na badle Burger laavu?"
+        - If ALL items available: Confirm the whole set politely.
+        - If some have limited stock: Tell them how much is left for each.
         - For BILL, PRICE, TIME, or TABLE questions, use this RESTAURANT_INFO: {json.dumps(RESTAURANT_INFO)}
         - Always respond in a friendly Gujlish (Gujarati-English) voice style.
-        - CRITICAL: Do NOT add to "items" unless they say "order" or "laao".
+        - CRITICAL: Extract EVERY dish mentioned as an order item unless the user explicitly says they DON'T want it.
+        - NEGATIONS: If a user says "nathi joie", "vagarna", or "no [addon]", include that exact phrase in "raw_addons". 
+          - Example: "extra butter na rakhvani" -> raw_addons: ["extra butter na rakhvani"].
+          - DO NOT set modifier to "increase" if the user is NEGATING the extra (e.g., "no extra butter" should be modifier "set" with negation in raw_addons).
 
     CRITICAL: ALWAYS extract the QUANTITY as a separate integer. NEVER include "10", "one", "ek", etc. in the "dish" string.
+    CRITICAL JSON RULE: Your entire response MUST be a single, valid JSON object. 
+    DO NOT include any commentary, notes, or apologies outside the JSON. 
+    Ensure every key and string is double-quoted. 
+    DO NOT include trailing commas in lists or objects.
     """
 
     AUTO_REPLACE_THRESHOLD = 0.85
@@ -485,6 +512,7 @@ def classify_order(transcript: str):
         intent = parsed_data.get("intent", None)
         
         final_order_result = {
+            "items": [], # Preserve the structured items
             "confirmed": {},
             "needs_confirmation": [],
             "not_in_menu": [],
@@ -497,37 +525,41 @@ def classify_order(transcript: str):
         for item in extracted_data:
             dish = item.get("dish")
             qty = item.get("quantity", 1)
+            portion = item.get("portion", "full")
+            modifier = item.get("modifier", "set")
             raw_addons = item.get("raw_addons", [])
             
             # Match Dish
             mapped_dish, dish_score = fuzzy_match_dish(dish)
             
-            # Allow ALL addons extracted by the LLM
-            processed_addons = raw_addons
-
-            item_details = {
+            # Prepare processed item
+            processed_item = {
+                "dish": mapped_dish if dish_score > 0.8 else dish,
                 "quantity": qty,
-                "addons": list(set(processed_addons))
+                "portion": portion,
+                "modifier": modifier,
+                "raw_addons": raw_addons
+            }
+            final_order_result["items"].append(processed_item)
+            
+            # Also keep 'confirmed' for backward compatibility or simple logic
+            final_order_result["confirmed"][processed_item["dish"]] = {
+                "quantity": qty,
+                "addons": raw_addons
             }
 
-            if dish_score >= AUTO_REPLACE_THRESHOLD:
-                if mapped_dish in final_order_result["confirmed"]:
-                    final_order_result["confirmed"][mapped_dish]["quantity"] += qty
-                    # Merge addons if needed, here we just extend
-                    final_order_result["confirmed"][mapped_dish]["addons"] = list(set(final_order_result["confirmed"][mapped_dish]["addons"] + item_details["addons"]))
+            if dish_score >= CONFIRMATION_THRESHOLD:
+                if dish_score < AUTO_REPLACE_THRESHOLD:
+                    final_order_result["needs_confirmation"].append({
+                        "original": dish,
+                        "suggested": mapped_dish,
+                        "quantity": qty,
+                        "score": round(dish_score, 2),
+                        "addons": raw_addons
+                    })
+                    print(f"DEBUG: Needs confirmation '{dish}' -> '{mapped_dish}'? (Score: {dish_score:.2f})")
                 else:
-                    final_order_result["confirmed"][mapped_dish] = item_details
-                print(f"DEBUG: Auto-matched '{dish}' -> '{mapped_dish}' (Score: {dish_score:.2f}) with Addons: {processed_addons}")
-            
-            elif dish_score >= CONFIRMATION_THRESHOLD:
-                final_order_result["needs_confirmation"].append({
-                    "original": dish,
-                    "suggested": mapped_dish,
-                    "quantity": qty,
-                    "score": round(dish_score, 2),
-                    "addons": item_details["addons"]
-                })
-                print(f"DEBUG: Needs confirmation '{dish}' -> '{mapped_dish}'? (Score: {dish_score:.2f})")
+                    print(f"DEBUG: Auto-matched '{dish}' -> '{mapped_dish}' (Score: {dish_score:.2f}) with Addons: {raw_addons}")
             
             else:
                 final_order_result["not_in_menu"].append(dish)

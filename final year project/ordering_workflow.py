@@ -57,9 +57,24 @@ async def transcribe_audio(file_path, noise_profile_bytes=None):
     
     return transcript, processed_audio_bytes, chunks_data
 
+def is_correction_phrase(text):
+    """Checks if a phrase contains words indicating negation or replacement."""
+    correction_words = [
+        "no", "not", "without", "remove", "delete", "instead", "replace",
+        "nahi", "nathi", "nai", "na", "vagarna", "badle", "rehne do", "hatao", "kadhi"
+    ]
+    text_lower = text.lower()
+    return any(word in text_lower for word in correction_words)
+
 def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
-    """Applies a list of confirmed corrections to the final consolidated order."""
+    """
+    Applies a list of confirmed corrections to the final consolidated order.
+    Returns (updated_order, changed).
+    Now with granular addon management.
+    """
     from classifier_service import fuzzy_match_dish
+    from rapidfuzz import fuzz, process
+    changed = False
     
     for corr in confirmed_corrections:
         action = corr.get("action")
@@ -77,6 +92,7 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
                     target_orig = mapped_orig if (score_orig > 0.5 and mapped_orig in final_confirmed_order) else (orig_dish if orig_dish in final_confirmed_order else None)
                     if target_orig:
                         del final_confirmed_order[target_orig]
+                        changed = True
                         print(f"DEBUG Correction: Removed '{target_orig}'")
                 
                 # 2. Handle addition of new dish
@@ -92,10 +108,28 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
                         else:
                             final_qty = qty
                             
+                        # Granular Addon Management
+                        new_addons_list = corr.get("addons", [])
+                        current_addons = existing_val.get("addons", [])
+                        final_addons = list(current_addons)
+                        
+                        for na in new_addons_list:
+                            match = process.extractOne(na, current_addons, scorer=fuzz.token_set_ratio) if current_addons else None
+                            if match and match[1] > 70:
+                                if is_correction_phrase(na):
+                                    # Correction intent: Replace/Remove
+                                    final_addons.remove(match[0])
+                                    final_addons.append(na)
+                                    print(f"DEBUG Correction: Modified addon '{match[0]}' -> '{na}'")
+                                # else: don't do anything (ignore redundant add)
+                            else:
+                                final_addons.append(na)
+                        
                         final_confirmed_order[mapped_new] = {
                             "quantity": final_qty, 
-                            "addons": list(set(existing_val.get("addons", []) + corr.get("addons", [])))
+                            "addons": list(set(final_addons))
                         }
+                        changed = True
                         print(f"DEBUG Correction: Added/Updated '{mapped_new}' to qty {final_qty}")
                     else:
                         print(f"DEBUG Correction: REJECTED '{new_dish}' (Not in menu, score {score_new:.2f})")
@@ -114,21 +148,48 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
                     else:
                         final_qty = qty
                         
+                    # Granular Addon Management
+                    new_addons_list = corr.get("addons", [])
+                    current_addons = val.get("addons", [])
+                    final_addons = list(current_addons)
+                    
+                    for na in new_addons_list:
+                        match = process.extractOne(na, current_addons, scorer=fuzz.token_set_ratio) if current_addons else None
+                        if match and match[1] > 70:
+                            if is_correction_phrase(na):
+                                final_addons.remove(match[0])
+                                final_addons.append(na)
+                                print(f"DEBUG Correction: Modified addon '{match[0]}' -> '{na}'")
+                        else:
+                            final_addons.append(na)
+
                     val["quantity"] = final_qty
-                    val["addons"] = list(set(val.get("addons", []) + corr.get("addons", [])))
+                    val["addons"] = list(set(final_addons))
                     final_confirmed_order[target_dish] = val
+                    changed = True
                     print(f"DEBUG Correction: Updated '{target_dish}' to qty {final_qty}")
                 else:
-                    print(f"DEBUG Correction: No target dish found for modifier update: '{dish}'")
+                    # IF DISH NOT IN CART: Add as a new item if it's in the menu
+                    if score > 0.5:
+                         final_confirmed_order[mapped_dish] = {
+                             "quantity": qty,
+                             "addons": corr.get("addons", [])
+                         }
+                         changed = True
+                         print(f"DEBUG Correction: Added new item '{mapped_dish}' via modifier request")
+                    else:
+                        print(f"DEBUG Correction: No target dish found for modifier update: '{dish}'")
 
         elif action == "remove":
             dish = corr.get("dish")
             mapped_dish, score = fuzzy_match_dish(dish)
             if score > 0.5 and mapped_dish in final_confirmed_order:
                 del final_confirmed_order[mapped_dish]
+                changed = True
                 print(f"DEBUG Correction: Removed '{mapped_dish}'")
             elif dish in final_confirmed_order:
                 del final_confirmed_order[dish]
+                changed = True
                 print(f"DEBUG Correction: Removed '{dish}'")
 
         elif action == "quantity_change":
@@ -147,10 +208,12 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
                 
                 val["quantity"] = final_qty
                 final_confirmed_order[target_dish] = val
+                changed = True
                 print(f"DEBUG Correction: Changed quantity of '{target_dish}' to {final_qty}")
 
         elif action == "cancel_all":
             final_confirmed_order.clear()
-            print("DEBUG Correction: Cancelled entire order")
+            changed = True
+            print(f"DEBUG Correction: Cancelled entire order")
             
-    return final_confirmed_order
+    return final_confirmed_order, changed

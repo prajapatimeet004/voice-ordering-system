@@ -1,6 +1,6 @@
 {
     "Masala Dosa": {
-        "stock": 10,
+        "stock": 0,
         "alternative": "Uttapam"
     },
     "Paneer Tikka": {
@@ -16,11 +16,14 @@
         "alternative": "Chhole Bhature"
     },
     "Chai": {
-        "stock": 50,
+        "stock": 54,
         "alternative": "Coffee"
     },
     "Pizza": {
         "stock": 0,
         "alternative": "Burger"
+    },
+    "Aloo Gobi": {
+        "stock": 0
     }
 }

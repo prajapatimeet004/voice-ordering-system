@@ -27,6 +27,9 @@ from correction_service import detect_correction, process_correction
 from ordering_workflow import apply_confirmed_corrections
 import httpx
 from tts_service import generate_speech
+import shutil
+import hashlib
+from typing import Optional
 
 API_URL = "http://127.0.0.1:8000"
 
@@ -50,12 +53,38 @@ def decode_base64_audio(base64_string):
         st.error(f"Audio decoding error: {e}")
         return None
 
+# Persistent Audio Storage Fix
+AUDIO_TEMP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp_audio")
+if not os.path.exists(AUDIO_TEMP_DIR):
+    os.makedirs(AUDIO_TEMP_DIR)
+
+def get_audio_path(audio_bytes: bytes, prefix: str = "audio") -> str:
+    """Saves bytes to a hashed filename in the temp directory and returns the path."""
+    if not audio_bytes:
+        return ""
+    file_hash = hashlib.md5(audio_bytes).hexdigest()
+    file_path = os.path.join(AUDIO_TEMP_DIR, f"{prefix}_{file_hash}.wav")
+    if not os.path.exists(file_path):
+        with open(file_path, "wb") as f:
+            f.write(audio_bytes)
+    return file_path
+
+def cleanup_temp_audio():
+    """Removes all files in the temp_audio directory."""
+    if os.path.exists(AUDIO_TEMP_DIR):
+        for filename in os.listdir(AUDIO_TEMP_DIR):
+            file_path = os.path.join(AUDIO_TEMP_DIR, filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)
+            except Exception as e:
+                print(f"Failed to delete {file_path}. Reason: {e}")
+
 def play_voice(speech_b64):
-    """Plays base64 audio in the UI."""
+    """Plays base64 audio in the UI using bytes to avoid MediaFileStorageError."""
     if speech_b64:
-        import hashlib
-        audio_hash = hashlib.md5(speech_b64.encode()).hexdigest()[:8]
-        st.audio(base64.b64decode(speech_b64), format="audio/wav")
+        speech_bytes = base64.b64decode(speech_b64)
+        st.audio(speech_bytes, format="audio/wav", autoplay=True)
 
 # Page Configuration
 st.set_page_config(page_title="Voice Ordering System", page_icon="🎙️")
@@ -81,6 +110,14 @@ st.markdown("""
         font-style: italic;
         color: #2c3e50;
     }
+    .assistant-box {
+        background-color: #e8f4fd;
+        border-left: 5px solid #2ecc71;
+        padding: 15px;
+        margin-top: 10px;
+        border-radius: 5px;
+        color: #1a5276;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -102,6 +139,9 @@ if "noise_key" not in st.session_state:
     st.session_state.noise_key = 1
 if "last_speech" not in st.session_state:
     st.session_state.last_speech = None
+if "last_response_text" not in st.session_state:
+    st.session_state.last_response_text = ""
+    # cleanup_temp_audio() # Initial cleanup on fresh session
 if "call_mode" not in st.session_state:
     st.session_state.call_mode = True # Default to True
 if "is_listening" not in st.session_state:
@@ -115,11 +155,13 @@ def reset_order():
         pass # Backend might already be reset or unreachable
     st.session_state.classification_result = {"confirmed": {}, "needs_confirmation": [], "not_in_menu": []}
     st.session_state.recording_history = []
+    st.session_state.last_response_text = ""
     st.session_state.pending_corrections = []
     if "last_audio_id" in st.session_state: 
         del st.session_state.last_audio_id
     st.session_state.last_speech = None
     st.session_state.recorder_key += 1 # Force refresh the recorder component
+    # cleanup_temp_audio()
     st.rerun()
 
 async def run_workflow(audio_bytes):
@@ -133,7 +175,16 @@ async def run_workflow(audio_bytes):
         if not current_transcript:
             st.warning("No speech detected. Please try recording again.")
             return
-        st.session_state.recording_history.append({"original_audio": audio_bytes, "processed_audio": processed_audio, "transcript": current_transcript})
+        
+        # Save to disk for stability
+        original_audio_path = get_audio_path(audio_bytes, prefix="original")
+        processed_audio_path = get_audio_path(processed_audio, prefix="processed") if processed_audio else None
+        
+        st.session_state.recording_history.append({
+            "original_audio_path": original_audio_path, 
+            "processed_audio_path": processed_audio_path, 
+            "transcript": current_transcript
+        })
         
         # Call FastAPI Classify for TTS and logic
         try:
@@ -144,10 +195,11 @@ async def run_workflow(audio_bytes):
                 st.session_state.classification_result["confirmed"] = data["current_order"]
                 st.session_state.classification_result["needs_confirmation"] = result.get("needs_confirmation", [])
                 st.session_state.classification_result["not_in_menu"] = result.get("not_in_menu", [])
+                st.session_state.last_response_text = data.get("response_text", "")
                 
-                # Play Speech
+                # Play Speech using bytes for stability
                 if data.get("speech"):
-                    st.session_state.last_speech = data["speech"] # Store last speech
+                    st.session_state.last_speech = data["speech"]
                     speech_bytes = base64.b64decode(data["speech"])
                     st.audio(speech_bytes, format="audio/wav", autoplay=True)
                 
@@ -164,7 +216,7 @@ async def run_workflow(audio_bytes):
         except Exception as e:
             st.error(f"Failed to connect to backend: {e}")
     finally:
-        if os.path.exists(temp_path): safe_remove(temp_path)
+        pass # Not deleting temp_path to avoid MediaFileStorageError
 
 # --- Processing Logic ---
 if "pending_workflow" not in st.session_state:
@@ -194,11 +246,37 @@ with st.sidebar:
             st.rerun()
 
     st.divider()
-    st.subheader("📜 Menu")
     from classifier_service import INDIAN_MENU
     with st.expander("Show Available Items"):
         for item in sorted(INDIAN_MENU):
             st.write(f"- {item}")
+    
+    st.divider()
+    st.subheader("🛠️ Inventory Management")
+    with st.expander("Update Stock/Availability"):
+        inv_dish = st.selectbox("Select Dish", sorted(INDIAN_MENU), key="inv_dish_select")
+        inv_change = st.number_input("Change Stock By", value=0, step=1, key="inv_change_input")
+        if st.button("Update Stock"):
+            try:
+                res = httpx.post(f"{API_URL}/inventory/update", data={"dish_name": inv_dish, "change": inv_change})
+                if res.status_code == 200:
+                    st.success(f"Updated! New stock: {res.json().get('new_stock')}")
+                else:
+                    st.error(f"Error: {res.text}")
+            except Exception as e:
+                st.error(f"Failed: {e}")
+        
+        st.write("---")
+        inv_avail = st.toggle("Available", value=True, key="inv_avail_toggle")
+        if st.button("Set Availability"):
+            try:
+                res = httpx.post(f"{API_URL}/inventory/availability", data={"dish_name": inv_dish, "available": inv_avail})
+                if res.status_code == 200:
+                    st.success(f"Set {inv_dish} to {'Available' if inv_avail else 'Unavailable'} (Stock: {res.json().get('stock')})")
+                else:
+                    st.error(f"Error: {res.text}")
+            except Exception as e:
+                st.error(f"Failed: {e}")
 
 # Main UI Layout
 st.markdown("<h1 class='header-text'>🎙️ Voice Ordering System</h1>", unsafe_allow_html=True)
@@ -248,6 +326,14 @@ with col1:
         <div class="transcript-box">
             <b>Latest Transcript:</b><br>
             "{latest['transcript']}"
+        </div>
+        """, unsafe_allow_html=True)
+
+    if st.session_state.last_response_text:
+        st.markdown(f"""
+        <div class="assistant-box">
+            <b>Assistant Reply:</b><br>
+            "{st.session_state.last_response_text}"
         </div>
         """, unsafe_allow_html=True)
 
@@ -346,8 +432,21 @@ with col2:
 
     if confirmed:
         if st.button("Submit Order", key="submit_order_btn"):
-            st.success("Order Placed!")
-            st.balloons()
+            try:
+                with st.spinner("Submitting..."):
+                    res = httpx.post(f"{API_URL}/order/submit", timeout=30.0)
+                if res.status_code == 200:
+                    data = res.json()
+                    st.success("Order Placed Successfully!")
+                    st.json(data.get("inventory_updates", []))
+                    st.balloons()
+                    # Clear local state
+                    st.session_state.classification_result = {"confirmed": {}, "needs_confirmation": [], "not_in_menu": []}
+                    st.rerun()
+                else:
+                    st.error(f"Submission failed: {res.text}")
+            except Exception as e:
+                st.error(f"Submission error: {e}")
 
 if st.session_state.recording_history:
     with st.expander("Recent Audio History"):
@@ -356,8 +455,15 @@ if st.session_state.recording_history:
             col_audio1, col_audio2 = st.columns(2)
             with col_audio1:
                 st.caption("Original Audio")
-                st.audio(entry["original_audio"])
+                if os.path.exists(entry["original_audio_path"]):
+                    try:
+                        st.audio(entry["original_audio_path"])
+                    except:
+                        st.warning("Audio file unavailable.")
             with col_audio2:
-                if entry.get("processed_audio"):
+                if entry.get("processed_audio_path") and os.path.exists(entry["processed_audio_path"]):
                     st.caption("Processed Audio (Sent to API)")
-                    st.audio(entry["processed_audio"])
+                    try:
+                        st.audio(entry["processed_audio_path"])
+                    except:
+                        st.warning("Audio file unavailable.")
