@@ -1,0 +1,26 @@
+{
+    "Masala Dosa": {
+        "stock": 10,
+        "alternative": "Uttapam"
+    },
+    "Paneer Tikka": {
+        "stock": 5,
+        "alternative": "Chicken Tikka"
+    },
+    "Butter Chicken": {
+        "stock": 0,
+        "alternative": "Paneer Tikka"
+    },
+    "Samosa": {
+        "stock": 2,
+        "alternative": "Chhole Bhature"
+    },
+    "Chai": {
+        "stock": 50,
+        "alternative": "Coffee"
+    },
+    "Pizza": {
+        "stock": 0,
+        "alternative": "Burger"
+    }
+}

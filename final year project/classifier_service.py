@@ -216,14 +216,34 @@ INDIAN_MENU = [
     "Chicken Tikka", "Mutton Rogan Josh", "Fish Curry", "Prawn Curry"
 ]
 
-# ADDON CONFIGURATION
+# CONFIGURATION LOADING
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Load Addons
 try:
     with open(os.path.join(_SCRIPT_DIR, "addons.json"), "r", encoding="utf-8") as f:
         ADDON_MODIFIERS = json.load(f)
 except FileNotFoundError:
     print("WARNING: addons.json not found. Using empty addon dictionary.")
     ADDON_MODIFIERS = {}
+
+# Load Kitchen Inventory
+try:
+    with open(os.path.join(_SCRIPT_DIR, "inventory.json"), "r", encoding="utf-8") as f:
+        KITCHEN_INVENTORY = json.load(f)
+except FileNotFoundError:
+    print("WARNING: inventory.json not found. Using empty inventory.")
+    KITCHEN_INVENTORY = {}
+
+# Restaurant Policy / Meta Info
+RESTAURANT_INFO = {
+    "Preparation Time": "15-20 minutes",
+    "Delivery": "Available within 5km for orders above ₹500",
+    "Table Booking": "Available for groups of 2-10 people",
+    "Payment Options": "UPI, Cash, and Card accepted",
+    "Speciality": "Butter Chicken and Masala Dosa",
+    "Complaints Policy": "If food is cold or service is slow, apologize and offer immediate replacement."
+}
 
 # Pre-calculate flattened addon keywords for simpler matching
 _ALL_ADDON_KEYWORDS = []
@@ -430,11 +450,14 @@ def classify_order(transcript: str):
         - CRITICAL: A number/quantity followed by a dish name (e.g., "1 samosa 2 tea") is a DEFINITIVE indicator of a new item. 
         - Ensure EVERY item mentioned is extracted into the "items" list. Do not omit any items.
 
-    15. MENU INQUIRIES & QUESTIONS: If the user asks if a dish is available (e.g., "Do you have Paneer Tikka?", "Is there any Sushi?", "Chai milegi?"):
-        - Check the dish against the "AVAILABLE MENU" provided.
-        - If available: Set "intent" to "inquiry" and "response_text" to a warm confirmation in the user's language (e.g., "Haan ji, Paneer Tikka available hai. Kya aap order karna chahenge?").
-        - If NOT available: Set "intent" to "inquiry" and "response_text" to a polite rejection (e.g., "I'm sorry, Sushi hamare menu mein nahi hai. Kya main aapko kuch aur suggest karun?").
-        - CRITICAL: Do NOT add the dish to the "items" list if they are only asking "Do you have...". Include it in "items" ONLY if they explicitly say "give me", "order", "lao", etc.
+    15. KITCHEN INVENTORY & MENU INQUIRIES: 
+        - Use this KITCHEN_INVENTORY to check availability: {json.dumps(KITCHEN_INVENTORY)}
+        - If item available (stock > 0): Set "intent" to "inquiry" and confirm (e.g., "Haan ji, [Dish] available chhe. Ketla plate laavu?").
+        - If NOT available (stock == 0): Suggest the 'alternative' from the inventory (e.g., "[Dish] available nathi, pan [Alternative] try karso?").
+        - If quantity exceeds stock: Suggest max possible (e.g., "5 available nathi, have 2 j chhe. 2 moklu?").
+        - For BILL, PRICE, TIME, or TABLE questions, use this RESTAURANT_INFO: {json.dumps(RESTAURANT_INFO)}
+        - Always respond in a friendly Gujlish (Gujarati-English) voice style.
+        - CRITICAL: Do NOT add to "items" unless they say "order" or "laao".
 
     CRITICAL: ALWAYS extract the QUANTITY as a separate integer. NEVER include "10", "one", "ek", etc. in the "dish" string.
     """
