@@ -2,23 +2,23 @@ import os
 import json
 import re
 from dotenv import load_dotenv
-# from groq import Groq # Lazy import
 from classifier_service import fuzzy_match_dish
 
-load_dotenv()
-SARVAM_API_KEY = os.getenv("SARVAM_API_KEY")
+load_dotenv(override=True)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GROQ_API_KEY") or os.getenv("SARVAM_API_KEY")
 
-if not SARVAM_API_KEY:
-    raise ValueError("❌ SARVAM_API_KEY not found in .env")
+if not GEMINI_API_KEY:
+    raise ValueError("❌ No API key found in .env (expected GEMINI_API_KEY)")
 
-_sarvam_client = None
+_gemini_model = None
 
-def get_sarvam_client():
-    global _sarvam_client
-    if _sarvam_client is None:
-        from sarvamai import SarvamAI
-        _sarvam_client = SarvamAI(api_subscription_key=SARVAM_API_KEY)
-    return _sarvam_client
+def get_gemini_model():
+    global _gemini_model
+    if _gemini_model is None:
+        from google import genai
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        _gemini_model = client
+    return _gemini_model
 
 def extract_json(text):
     """
@@ -219,12 +219,14 @@ def process_correction(transcript: str, current_order_items=None):
     
     Each object must have:
     - action: string ('modify', 'remove', 'quantity_change', 'cancel_all')
-    - dish: string (the item being corrected, EXACTLY from transcript, NO TRANSLATION)
-    - original_dish: string (empty unless replacing dish A with dish B, EXACTLY from transcript, NO TRANSLATION)
-    - new_dish: string (empty unless replacing dish A with dish B, EXACTLY from transcript, NO TRANSLATION)
+    - dish: string (the item being corrected, EXACTLY from transcript)
+    - original_dish: string (empty unless replacing dish A with dish B)
+    - new_dish: string (empty unless replacing dish A with dish B)
+    - original_addon: string (empty unless replacing addon A with addon B, e.g., "medium spicy" badle "tikha")
+    - new_addon: string (empty unless replacing addon A with addon B)
     - quantity: integer (the quantity mentioned, e.g. 1)
     - is_relative: boolean (true if user said "add", "more", "vadhare", "zyada", else false)
-    - raw_addons: list of strings (new customization requested, EXACTLY from transcript, NO TRANSLATION)
+    - raw_addons: list of strings (new customization requested, EXACTLY from transcript)
     - correction_found: boolean
 
     EXAMPLES:
@@ -238,26 +240,24 @@ def process_correction(transcript: str, current_order_items=None):
     - [Transcript]: "masala dosa nahi be coffee aapo"
       [Correct Output]: {{"corrections": [{{"action": "modify", "original_dish": "masala dosa", "new_dish": "coffee", "quantity": 2, "is_relative": false, "raw_addons": [], "correction_found": true}}]}}
     
-    - [Transcript]: "biryani ma thodu vadhu tikhu rakho"
-      [Correct Output]: {{"corrections": [{{"action": "modify", "dish": "biryani", "raw_addons": ["thodu vadhu tikhu"], "quantity": 1, "is_relative": false, "correction_found": true}}]}}
+    - [Transcript]: "biryani ma spicy badle medium spicy rakho"
+      [Correct Output]: {{"corrections": [{{"action": "modify", "dish": "biryani", "original_addon": "spicy", "new_addon": "medium spicy", "quantity": 1, "is_relative": false, "raw_addons": ["medium spicy"], "correction_found": true}}]}}
 
     - [Transcript]: "Add one more masala toss"
       [Correct Output]: {{"corrections": [{{"action": "modify", "dish": "masala toss", "quantity": 1, "is_relative": true, "raw_addons": [], "correction_found": true}}]}}
     """
 
-    client = get_sarvam_client()
+    model = get_gemini_model()
     try:
-        response = client.chat.completions(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Transcript: {transcript}"}
-            ],
-            temperature=0
+        full_prompt = system_prompt + f"\n\nCorrection Transcript: {transcript}"
+        response = model.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=full_prompt
         )
 
-        result_content = response.choices[0].message.content
+        result_content = response.text
         if not result_content or not result_content.strip():
-            print("WARNING: Sarvam API returned empty response for correction processing.")
+            print("WARNING: Gemini API returned empty response for correction processing.")
             return []
         # Extract JSON from potential <think> or ``` markdown blocks
         clean_json = extract_json(result_content)

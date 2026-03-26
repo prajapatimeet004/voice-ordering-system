@@ -6,6 +6,7 @@ pydub
 sarvamai
 python-dotenv
 groq
+google-genai
 asyncio
 torch
 onnxruntime

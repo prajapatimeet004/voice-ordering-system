@@ -1,6 +1,8 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
 import os
+load_dotenv(override=True)
 import shutil
 import tempfile
 import asyncio
@@ -155,17 +157,28 @@ async def classify(transcript: str = Form(...)):
             # Load inventory for explicit server-side check
             from classifier_service import fuzzy_match_dish
             
+            # Get items that need confirmation to avoid adding them prematurely
+            needs_confirm_originals = [s.get("original", "").lower() for s in result.get("needs_confirmation", [])]
+            suggested_dishes = [s.get("suggested", "").lower() for s in result.get("needs_confirmation", [])]
+
             # New items or modifications
             for item in result["items"]:
                 dish_name = item["dish"]
+                
+                # SKIP if this item is currently being suggested for confirmation
+                if dish_name.lower() in needs_confirm_originals or dish_name.lower() in suggested_dishes:
+                    print(f"DEBUG: Skipping '{dish_name}' because it needs confirmation.")
+                    continue
+
                 qty = item.get("quantity", 1)
                 portion = item.get("portion", "full")
                 modifier = item.get("modifier", "set")
                 addons = item.get("raw_addons", [])
                 
                 # Standardize dish name using fuzzy matching against inventory
+                # Use a lower threshold (0.6) for consistent key normalization, but respect LLM's uncertainty
                 matched_dish, score = fuzzy_match_dish(dish_name)
-                final_dish_name = matched_dish if score > 0.8 else dish_name
+                final_dish_name = matched_dish if score > 0.7 else dish_name
                 
                 # Check Availability using standardized name
                 is_available, stock = inventory_service.check_availability(final_dish_name, qty)
@@ -356,4 +369,5 @@ async def toggle_availability(dish_name: str = Form(...), available: bool = Form
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Use string import path to enable reload
+    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)

@@ -3,26 +3,24 @@ import json
 import re
 from dotenv import load_dotenv
 from rapidfuzz import process, fuzz
-# from groq import Groq # Moved inside functions or lazy init
-# from sentence_transformers import SentenceTransformer, util # Moved inside functions
-# import torch # Moved inside functions
 
-load_dotenv()
-SARVAM_API_KEY = os.getenv("SARVAM_API_KEY")
+load_dotenv(override=True)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GROQ_API_KEY") or os.getenv("SARVAM_API_KEY")
 
-if not SARVAM_API_KEY:
-    raise ValueError("❌ SARVAM_API_KEY not found in .env")
+if not GEMINI_API_KEY:
+    raise ValueError("❌ No API key found in .env (expected GEMINI_API_KEY)")
 
 import inventory_service
 
-_sarvam_client = None
+_gemini_model = None
 
-def get_sarvam_client():
-    global _sarvam_client
-    if _sarvam_client is None:
-        from sarvamai import SarvamAI
-        _sarvam_client = SarvamAI(api_subscription_key=SARVAM_API_KEY)
-    return _sarvam_client
+def get_gemini_model():
+    global _gemini_model
+    if _gemini_model is None:
+        from google import genai
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        _gemini_model = client
+    return _gemini_model
 
 def extract_json(text):
     """
@@ -493,17 +491,15 @@ def classify_order(transcript: str):
     CONFIRMATION_THRESHOLD = 0.55
     ADDON_THRESHOLD = 0.70
 
-    client = get_sarvam_client()
+    model = get_gemini_model()
     try:
-        response = client.chat.completions(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Original: {transcript}\nPreprocessed: {preprocessed_text}"}
-            ],
-            temperature=0
+        full_prompt = system_prompt + f"\n\nUser Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}"
+        response = model.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=full_prompt
         )
 
-        result_content = response.choices[0].message.content
+        result_content = response.text
         # Extract JSON from potential <think> or ``` markdown blocks
         clean_json = extract_json(result_content)
         parsed_data = json.loads(clean_json)
@@ -568,7 +564,7 @@ def classify_order(transcript: str):
         return final_order_result
 
     except Exception as e:
-        print(f"ERROR: Groq Classification Error: {e}")
+        print(f"ERROR: Gemini Classification Error: {e}")
         return {"error": str(e), "confirmed": {}, "needs_confirmation": [], "not_in_menu": []}
 
 if __name__ == "__main__":

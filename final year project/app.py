@@ -1,5 +1,7 @@
 import sys
 import os
+from dotenv import load_dotenv
+load_dotenv(override=True)
 # Ensure the current directory is in the search path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -81,10 +83,11 @@ def cleanup_temp_audio():
                 print(f"Failed to delete {file_path}. Reason: {e}")
 
 def play_voice(speech_b64):
-    """Plays base64 audio in the UI using bytes to avoid MediaFileStorageError."""
+    """Plays base64 audio in the UI using Data URIs for maximum stability."""
     if speech_b64:
-        speech_bytes = base64.b64decode(speech_b64)
-        st.audio(speech_bytes, format="audio/wav", autoplay=True)
+        # Use Data URI for maximum stability and to avoid MediaFileStorageError
+        audio_type = "audio/wav"
+        st.audio(f"data:{audio_type};base64,{speech_b64}", format=audio_type, autoplay=True)
 
 # Page Configuration
 st.set_page_config(page_title="Voice Ordering System", page_icon="🎙️")
@@ -197,11 +200,10 @@ async def run_workflow(audio_bytes):
                 st.session_state.classification_result["not_in_menu"] = result.get("not_in_menu", [])
                 st.session_state.last_response_text = data.get("response_text", "")
                 
-                # Play Speech using bytes for stability
+                # Play Speech using Data URI for stability
                 if data.get("speech"):
                     st.session_state.last_speech = data["speech"]
-                    speech_bytes = base64.b64decode(data["speech"])
-                    st.audio(speech_bytes, format="audio/wav", autoplay=True)
+                    st.audio(f"data:audio/wav;base64,{data['speech']}", format="audio/wav", autoplay=True)
                 
                 if data.get("is_finished"):
                     st.success("Order Finished!")
@@ -394,8 +396,7 @@ with col2:
                             st.session_state.classification_result["confirmed"] = data["current_order"]
                             st.session_state.classification_result["needs_confirmation"].pop(i)
                             if data.get("speech"):
-                                st.session_state.last_speech = data["speech"] # Store last speech
-                                st.audio(base64.b64decode(data["speech"]), format="audio/wav", autoplay=True)
+                                st.audio(f"data:audio/wav;base64,{data['speech']}", format="audio/wav", autoplay=True)
                             st.rerun()
                 with col_n:
                     if st.button(f"No (Remove)", key=f"unc_n_{i}"):
@@ -457,13 +458,17 @@ if st.session_state.recording_history:
                 st.caption("Original Audio")
                 if os.path.exists(entry["original_audio_path"]):
                     try:
-                        st.audio(entry["original_audio_path"])
-                    except:
-                        st.warning("Audio file unavailable.")
+                        with open(entry["original_audio_path"], "rb") as f:
+                            b64 = base64.b64encode(f.read()).decode()
+                            st.audio(f"data:audio/wav;base64,{b64}", format="audio/wav")
+                    except Exception as e:
+                        st.warning(f"Audio file unavailable: {e}")
             with col_audio2:
                 if entry.get("processed_audio_path") and os.path.exists(entry["processed_audio_path"]):
                     st.caption("Processed Audio (Sent to API)")
                     try:
-                        st.audio(entry["processed_audio_path"])
-                    except:
-                        st.warning("Audio file unavailable.")
+                        with open(entry["processed_audio_path"], "rb") as f:
+                            b64 = base64.b64encode(f.read()).decode()
+                            st.audio(f"data:audio/wav;base64,{b64}", format="audio/wav")
+                    except Exception as e:
+                        st.warning(f"Audio file unavailable: {e}")
