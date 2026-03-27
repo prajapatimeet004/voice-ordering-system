@@ -243,8 +243,16 @@ def process_correction(transcript: str, current_order_items=None):
     - [Transcript]: "biryani ma spicy badle medium spicy rakho"
       [Correct Output]: {{"corrections": [{{"action": "modify", "dish": "biryani", "original_addon": "spicy", "new_addon": "medium spicy", "quantity": 1, "is_relative": false, "raw_addons": ["medium spicy"], "correction_found": true}}]}}
 
+    - [Transcript]: "Uttapam spicy na rakhjo eni jagyae thodu meethu ane galiyo rakhjo"
+      [Correct Output]: {{"corrections": [
+          {{"action": "modify", "dish": "Uttapam", "raw_addons": ["spicy na rakhjo"], "correction_found": true}},
+          {{"action": "modify", "dish": "Uttapam", "original_addon": "spicy", "new_addon": "thodu meethu ane galiyo", "quantity": 1, "is_relative": false, "raw_addons": ["thodu meethu ane galiyo"], "correction_found": true}}
+      ]}}
+
     - [Transcript]: "Add one more masala toss"
       [Correct Output]: {{"corrections": [{{"action": "modify", "dish": "masala toss", "quantity": 1, "is_relative": true, "raw_addons": [], "correction_found": true}}]}}
+    
+    CRITICAL: If a user mentions multiple corrections (e.g., "don't add X, instead add Y"), you MUST provide separate entries or ensure all intents are captured. Every "nahi", "na", or "badle" intent must be reflected.
     """
 
     model = get_gemini_model()

@@ -61,7 +61,8 @@ def is_correction_phrase(text):
     """Checks if a phrase contains words indicating negation or replacement."""
     correction_words = [
         "no", "not", "without", "remove", "delete", "instead", "replace",
-        "nahi", "nathi", "nai", "na", "vagarna", "badle", "rehne do", "hatao", "kadhi"
+        "nahi", "nathi", "nai", "na", "vagarna", "badle", "rehne do", "hatao", "kadhi",
+        "na rakhjo", "na rakhvun", "na nakho", "vagar", "eni jagyae", "enabade"
     ]
     text_lower = text.lower()
     return any(word in text_lower for word in correction_words)
@@ -110,20 +111,34 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
                             
                         # Granular Addon Management
                         new_addons_list = corr.get("addons", [])
+                        orig_addon = corr.get("original_addon")
+                        new_addon_val = corr.get("new_addon")
                         current_addons = existing_val.get("addons", [])
                         final_addons = list(current_addons)
                         
+                        # Handle explicit replacements first (A badle B)
+                        if orig_addon and new_addon_val:
+                            match = process.extractOne(orig_addon, current_addons, scorer=fuzz.token_set_ratio) if current_addons else None
+                            if match and match[1] > 70:
+                                final_addons.remove(match[0])
+                                final_addons.append(new_addon_val)
+                                print(f"DEBUG Correction: Replaced addon '{match[0]}' with '{new_addon_val}'")
+                        
+                        # Handle raw_addons list (negations or additions)
                         for na in new_addons_list:
+                            # Skip if already handled by explicit replacement
+                            if na == new_addon_val: continue
+                            
                             match = process.extractOne(na, current_addons, scorer=fuzz.token_set_ratio) if current_addons else None
                             if match and match[1] > 70:
                                 if is_correction_phrase(na):
-                                    # Correction intent: Replace/Remove
-                                    final_addons.remove(match[0])
-                                    final_addons.append(na)
-                                    print(f"DEBUG Correction: Modified addon '{match[0]}' -> '{na}'")
-                                # else: don't do anything (ignore redundant add)
+                                    # Correction intent: Remove
+                                    if match[0] in final_addons:
+                                        final_addons.remove(match[0])
+                                    print(f"DEBUG Correction: Removed addon '{match[0]}' due to negation '{na}'")
                             else:
-                                final_addons.append(na)
+                                if not is_correction_phrase(na):
+                                    final_addons.append(na)
                         
                         final_confirmed_order[mapped_new] = {
                             "quantity": final_qty, 
@@ -150,18 +165,33 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
                         
                     # Granular Addon Management
                     new_addons_list = corr.get("addons", [])
+                    orig_addon = corr.get("original_addon")
+                    new_addon_val = corr.get("new_addon")
                     current_addons = val.get("addons", [])
                     final_addons = list(current_addons)
                     
+                    # Handle explicit replacements first (A badle B)
+                    if orig_addon and new_addon_val:
+                        match = process.extractOne(orig_addon, current_addons, scorer=fuzz.token_set_ratio) if current_addons else None
+                        if match and match[1] > 70:
+                            final_addons.remove(match[0])
+                            final_addons.append(new_addon_val)
+                            print(f"DEBUG Correction: Replaced addon '{match[0]}' with '{new_addon_val}'")
+
+                    # Handle raw_addons list
                     for na in new_addons_list:
+                        # Skip if already handled by explicit replacement
+                        if na == new_addon_val: continue
+                        
                         match = process.extractOne(na, current_addons, scorer=fuzz.token_set_ratio) if current_addons else None
                         if match and match[1] > 70:
                             if is_correction_phrase(na):
-                                final_addons.remove(match[0])
-                                final_addons.append(na)
-                                print(f"DEBUG Correction: Modified addon '{match[0]}' -> '{na}'")
+                                if match[0] in final_addons:
+                                    final_addons.remove(match[0])
+                                print(f"DEBUG Correction: Removed addon '{match[0]}' due to negation '{na}'")
                         else:
-                            final_addons.append(na)
+                            if not is_correction_phrase(na):
+                                final_addons.append(na)
 
                     val["quantity"] = final_qty
                     val["addons"] = list(set(final_addons))
