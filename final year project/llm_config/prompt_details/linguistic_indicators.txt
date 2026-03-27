@@ -1,0 +1,9 @@
+ITEM SEPARATORS:
+- Gujarati: ane, sathe (if it has quantity), jode, beju, pachi, plus, ane biju
+- Hindi: aur, and, saath (if it has quantity), phir, dusra, plus, aur ek
+- English: and, plus, also, then, with (if it has quantity), another
+
+ADDON INDICATORS (Words meaning "with"):
+- Gujarati: sathe, jode, sathe aapo, sathe aapjo, sathe mukjo, sathe rakho, sathe aapvu, sathe pan aapo, sathe pan mukjo, sathe add karo, sathe lai aavo, sathe serve karo, sathe muki do, sathe pan aapjo, sathe pan moklo
+- Hindi: ke saath, saath mein, saath, iske saath, iske saath dena, saath mein dena, saath mein laana, saath mein daalna, saath mein bhejna, iske saath bhi, saath mein jodo, saath mein laga do, saath mein rakho, saath mein serve karo
+- English: with, along with, together with, serve with, add with, include with, give with, bring with, send with, pair with, served with, side with, with extra, with side, with topping

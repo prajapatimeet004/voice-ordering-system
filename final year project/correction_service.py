@@ -175,6 +175,33 @@ def detect_correction(transcript: str, threshold=0.90):
     
     return hybrid_score >= threshold
 
+# Pre-defined Response Schema for Order Corrections
+CORRECTION_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "corrections": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "action": {"type": "STRING", "enum": ["modify", "remove", "quantity_change", "cancel_all"], "description": "Action type"},
+                    "dish": {"type": "STRING", "description": "Dish being corrected, EXACTLY as spoken"},
+                    "original_dish": {"type": "STRING", "description": "The dish being replaced (if any)"},
+                    "new_dish": {"type": "STRING", "description": "The new dish (if replacing)"},
+                    "original_addon": {"type": "STRING", "description": "The addon being replaced (if any)"},
+                    "new_addon": {"type": "STRING", "description": "The new addon name (if replacing)"},
+                    "quantity": {"type": "INTEGER", "description": "The quantity mentioned"},
+                    "is_relative": {"type": "BOOLEAN", "description": "True if adding to current (add/extra)"},
+                    "raw_addons": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "New customization phrases"},
+                    "correction_found": {"type": "BOOLEAN", "description": "Must be true if any correction was identified"}
+                },
+                "required": ["action", "dish", "quantity", "is_relative", "raw_addons", "correction_found"]
+            }
+        }
+    },
+    "required": ["corrections"]
+}
+
 def process_correction(transcript: str, current_order_items=None):
     """
     Sends the correction transcript to Groq LLM to identify the corrected dish and action.
@@ -215,43 +242,17 @@ def process_correction(transcript: str, current_order_items=None):
         - For items with no modifications, use action: 'modify', dish: '[item name]', quantity: [qty], raw_addons: [].
         - NEVER omit an item just because it doesn't have a correction. If it's in the transcript, it MUST be in the JSON.
     
-    Output ONLY a clean JSON object with a key "corrections" which is a LIST of objects.
-    
-    Each object must have:
-    - action: string ('modify', 'remove', 'quantity_change', 'cancel_all')
-    - dish: string (the item being corrected, EXACTLY from transcript)
-    - original_dish: string (empty unless replacing dish A with dish B)
-    - new_dish: string (empty unless replacing dish A with dish B)
-    - original_addon: string (empty unless replacing addon A with addon B, e.g., "medium spicy" badle "tikha")
-    - new_addon: string (empty unless replacing addon A with addon B)
-    - quantity: integer (the quantity mentioned, e.g. 1)
-    - is_relative: boolean (true if user said "add", "more", "vadhare", "zyada", else false)
-    - raw_addons: list of strings (new customization requested, EXACTLY from transcript)
-    - correction_found: boolean
+    10. RULES FOR FIELDS:
+        - dish: string (the item being corrected, EXACTLY from transcript)
+        - original_dish: string (empty unless replacing dish A with dish B)
+        - new_dish: string (empty unless replacing dish A with dish B)
+        - original_addon: string (empty unless replacing addon A with addon B)
+        - new_addon: string (empty unless replacing addon A with addon B)
+        - quantity: integer (the quantity mentioned, e.g. 1)
+        - is_relative: boolean (true if adding to existing qty)
+        - raw_addons: list of strings (new customization phrases)
+        - correction_found: boolean (set to true if a correction item is found)
 
-    EXAMPLES:
-    - [Transcript]: "Ek burger, ek chai, thoda masala dosa spicy rakhjo"
-      [Correct Output]: {{"corrections": [
-          {{"action": "modify", "dish": "burger", "quantity": 1, "is_relative": false, "raw_addons": [], "correction_found": true}},
-          {{"action": "modify", "dish": "chai", "quantity": 1, "is_relative": false, "raw_addons": [], "correction_found": true}},
-          {{"action": "modify", "dish": "masala dosa", "quantity": 1, "is_relative": false, "raw_addons": ["spicy"], "correction_found": true}}
-      ]}}
-
-    - [Transcript]: "masala dosa nahi be coffee aapo"
-      [Correct Output]: {{"corrections": [{{"action": "modify", "original_dish": "masala dosa", "new_dish": "coffee", "quantity": 2, "is_relative": false, "raw_addons": [], "correction_found": true}}]}}
-    
-    - [Transcript]: "biryani ma spicy badle medium spicy rakho"
-      [Correct Output]: {{"corrections": [{{"action": "modify", "dish": "biryani", "original_addon": "spicy", "new_addon": "medium spicy", "quantity": 1, "is_relative": false, "raw_addons": ["medium spicy"], "correction_found": true}}]}}
-
-    - [Transcript]: "Uttapam spicy na rakhjo eni jagyae thodu meethu ane galiyo rakhjo"
-      [Correct Output]: {{"corrections": [
-          {{"action": "modify", "dish": "Uttapam", "raw_addons": ["spicy na rakhjo"], "correction_found": true}},
-          {{"action": "modify", "dish": "Uttapam", "original_addon": "spicy", "new_addon": "thodu meethu ane galiyo", "quantity": 1, "is_relative": false, "raw_addons": ["thodu meethu ane galiyo"], "correction_found": true}}
-      ]}}
-
-    - [Transcript]: "Add one more masala toss"
-      [Correct Output]: {{"corrections": [{{"action": "modify", "dish": "masala toss", "quantity": 1, "is_relative": true, "raw_addons": [], "correction_found": true}}]}}
-    
     CRITICAL: If a user mentions multiple corrections (e.g., "don't add X, instead add Y"), you MUST provide separate entries or ensure all intents are captured. Every "nahi", "na", or "badle" intent must be reflected.
     """
 
@@ -259,25 +260,31 @@ def process_correction(transcript: str, current_order_items=None):
     try:
         full_prompt = system_prompt + f"\n\nCorrection Transcript: {transcript}"
         response = model.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=full_prompt
+            model="gemini-flash-latest",
+            contents=full_prompt,
+            config={
+                'response_mime_type': 'application/json',
+                'response_schema': CORRECTION_SCHEMA
+            }
         )
 
-        result_content = response.text
-        if not result_content or not result_content.strip():
-            print("WARNING: Gemini API returned empty response for correction processing.")
-            return []
-        # Extract JSON from potential <think> or ``` markdown blocks
-        clean_json = extract_json(result_content)
-        try:
-            corrections = json.loads(clean_json).get("corrections", [])
-        except json.JSONDecodeError as json_err:
-            print(f"WARNING: Could not parse correction JSON: {json_err}. Raw: {result_content[:200]}")
-            return []
+        parsed_data = response.parsed
+        # Fallback to manual parsing if .parsed is not available or empty
+        if not parsed_data:
+            text_content = response.text
+            if not text_content or not text_content.strip():
+                print("WARNING: Gemini API returned empty response for correction processing.")
+                return []
+            clean_json = extract_json(text_content)
+            try:
+                parsed_data = json.loads(clean_json)
+            except json.JSONDecodeError as json_err:
+                print(f"WARNING: Could not parse correction JSON: {json_err}. Raw: {text_content[:200]}")
+                return []
+            
+        corrections = parsed_data.get("corrections", [])
         
         # Enhance corrections with matching scores and addons
-        # from classifier_service import match_addon_hybrid # This import was already present in the original, keeping it.
-
         for corr in corrections:
             if not corr.get("correction_found"):
                 continue

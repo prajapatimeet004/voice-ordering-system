@@ -1,0 +1,1360 @@
+{
+    "more_spicy": {
+        "meaning": "increase spice level",
+        "keywords": [
+            "vadhare tikhu",
+            "khub tikhu",
+            "thodu tikhu",
+            "vadhu tikhu",
+            "vadhare tiakhu",
+            "khub tiakhu",
+            "thodu tiakhu",
+            "vadhu tiakhu",
+            "zyada teekha",
+            "bahut teekha",
+            "teekha jyada",
+            "thoda teekha",
+            "aur teekha",
+            "teekha karo",
+            "more spicy",
+            "very spicy",
+            "make it spicy",
+            "spicy more",
+            "extra spicy"
+        ]
+    },
+    "less_spicy": {
+        "meaning": "reduce spice level",
+        "keywords": [
+            "ochu tikhu",
+            "thodu ochu tikhu",
+            "ochu tiakhu",
+            "thodu ochu tiakhu",
+            "kam teekha",
+            "thoda kam teekha",
+            "teekha kam",
+            "kam teekhi",
+            "thodi kam teekhi",
+            "less spicy",
+            "not too spicy",
+            "mild spicy",
+            "reduce spice"
+        ]
+    },
+    "no_spicy": {
+        "meaning": "no spice at all",
+        "keywords": [
+            "bilkul tikhu nahi",
+            "tikhu mukta nahi",
+            "tikhu vagar",
+            "bilkul tiakhu nahi",
+            "tiakhu mukta nahi",
+            "tiakhu vagar",
+            "bilkul teekha nahi",
+            "bina teekhe ka",
+            "teekha mat dalna",
+            "safed gravy",
+            "no spicy",
+            "zero spice",
+            "not spicy at all",
+            "without spice"
+        ]
+    },
+    "medium_spicy": {
+        "meaning": "medium spice level",
+        "keywords": [
+            "medium tikhu",
+            "madhyam tikhu",
+            "normal tikhu",
+            "medium teekha",
+            "normal teekha",
+            "thoda teekha",
+            "medium spicy",
+            "normal spicy",
+            "regular spicy"
+        ]
+    },
+    "extra_chili": {
+        "meaning": "more chili",
+        "keywords": [
+            "marchu vadhare",
+            "lal marchu vadhare",
+            "lilu marchu vadhare",
+            "mirchi zyada",
+            "laal mirch zyada",
+            "hari mirch zyada",
+            "more chili",
+            "extra chili",
+            "more red chili",
+            "more green chili"
+        ]
+    },
+    "less_chili": {
+        "meaning": "less chili",
+        "keywords": [
+            "marchu ochu",
+            "lilu marchu ochu",
+            "mirchi kam",
+            "hari mirch kam",
+            "less chili",
+            "less green chili"
+        ]
+    },
+    "no_chili": {
+        "meaning": "no chili",
+        "keywords": [
+            "marchu na nakho",
+            "mirchi mat dalna",
+            "no chili",
+            "without chili"
+        ]
+    },
+    "extra_masala": {
+        "meaning": "more masala",
+        "keywords": [
+            "masalo vadhare",
+            "masaledar banavo",
+            "thodu masaledar",
+            "masala zyada",
+            "masaledar banao",
+            "aur masala",
+            "extra masala",
+            "more masala",
+            "make it spicy"
+        ]
+    },
+    "less_masala": {
+        "meaning": "less masala",
+        "keywords": [
+            "masalo ocho",
+            "ochu masaledar",
+            "masala kam",
+            "kam masaledar",
+            "less masala",
+            "mild masala"
+        ]
+    },
+    "no_masala": {
+        "meaning": "no masala",
+        "keywords": [
+            "masalo na nakho",
+            "masala mat dalna",
+            "no masala",
+            "without masala"
+        ]
+    },
+    "desi_style": {
+        "meaning": "desi style cooking",
+        "keywords": [
+            "desi tikhu",
+            "kathiyawadi tikhu",
+            "desi teekha",
+            "desi style",
+            "desi spicy",
+            "traditional style"
+        ]
+    },
+    "extra_butter": {
+        "meaning": "add extra butter",
+        "keywords": [
+            "butter vadhare",
+            "extra butter",
+            "double butter",
+            "makhan vadhare",
+            "makkhan zyada",
+            "aur makkhan",
+            "double makkhan",
+            "extra butter",
+            "more butter",
+            "double butter"
+        ]
+    },
+    "less_butter": {
+        "meaning": "less butter",
+        "keywords": [
+            "butter ochu",
+            "makhan ochu",
+            "makkhan kam",
+            "butter kam",
+            "less butter",
+            "little butter"
+        ]
+    },
+    "no_butter": {
+        "meaning": "without butter",
+        "keywords": [
+            "butter vagar",
+            "makhan vagar",
+            "bina makkhan",
+            "makkhan mat dalna",
+            "no butter",
+            "without butter"
+        ]
+    },
+    "cook_in_ghee": {
+        "meaning": "cook in ghee",
+        "keywords": [
+            "ghee ma banavo",
+            "pure ghee ma",
+            "ghee mein banao",
+            "shuddh ghee mein",
+            "cook in ghee",
+            "make it in ghee"
+        ]
+    },
+    "extra_ghee": {
+        "meaning": "extra ghee",
+        "keywords": [
+            "ghee vadhare",
+            "ghee zyada",
+            "aur ghee",
+            "extra ghee",
+            "more ghee"
+        ]
+    },
+    "less_ghee": {
+        "meaning": "less ghee",
+        "keywords": [
+            "ghee ochu",
+            "ghee kam",
+            "less ghee"
+        ]
+    },
+    "no_ghee": {
+        "meaning": "no ghee",
+        "keywords": [
+            "ghee vagar",
+            "bina ghee",
+            "no ghee",
+            "without ghee"
+        ]
+    },
+    "less_oil": {
+        "meaning": "less oil",
+        "keywords": [
+            "tel ochu",
+            "tel kam",
+            "less oil"
+        ]
+    },
+    "extra_oil": {
+        "meaning": "more oil",
+        "keywords": [
+            "tel vadhare",
+            "tel zyada",
+            "extra oil",
+            "more oil"
+        ]
+    },
+    "no_oil": {
+        "meaning": "no oil",
+        "keywords": [
+            "tel vagar",
+            "bina tel",
+            "no oil",
+            "without oil",
+            "oil free"
+        ]
+    },
+    "extra_cheese": {
+        "meaning": "add extra cheese",
+        "keywords": [
+            "extra cheese",
+            "cheese vadhare",
+            "double cheese",
+            "cheese topping",
+            "cheese nakho",
+            "cheese burst",
+            "cheese loaded",
+            "grated cheese",
+            "cheese zyada",
+            "aur cheese",
+            "bhar ke cheese",
+            "more cheese",
+            "double cheese",
+            "cheese topping"
+        ]
+    },
+    "less_cheese": {
+        "meaning": "less cheese",
+        "keywords": [
+            "cheese ochu",
+            "cheese kam",
+            "less cheese"
+        ]
+    },
+    "no_cheese": {
+        "meaning": "no cheese",
+        "keywords": [
+            "cheese vagar",
+            "bina cheese",
+            "no cheese",
+            "without cheese"
+        ]
+    },
+    "no_onion": {
+        "meaning": "no onion",
+        "keywords": [
+            "dungli vagar",
+            "dungli na nakho",
+            "bina pyaz",
+            "pyaz mat dalna",
+            "pyaz nahi",
+            "no onion",
+            "without onion"
+        ]
+    },
+    "no_garlic": {
+        "meaning": "no garlic",
+        "keywords": [
+            "lasan vagar",
+            "lasan na nakho",
+            "bina lahsun",
+            "lahsun mat dalna",
+            "lahsun nahi",
+            "no garlic",
+            "without garlic"
+        ]
+    },
+    "no_onion_garlic": {
+        "meaning": "no onion no garlic",
+        "keywords": [
+            "dungli lasan vagar",
+            "bina pyaz lahsun",
+            "no onion no garlic"
+        ]
+    },
+    "extra_onion": {
+        "meaning": "more onion",
+        "keywords": [
+            "dungli vadhare",
+            "pyaz zyada",
+            "extra onion",
+            "more onion"
+        ]
+    },
+    "less_onion": {
+        "meaning": "less onion",
+        "keywords": [
+            "dungli ochi",
+            "pyaz kam",
+            "less onion"
+        ]
+    },
+    "extra_garlic": {
+        "meaning": "more garlic",
+        "keywords": [
+            "lasan vadhare",
+            "lahsun zyada",
+            "extra garlic",
+            "more garlic"
+        ]
+    },
+    "less_garlic": {
+        "meaning": "less garlic",
+        "keywords": [
+            "lasan ochi",
+            "lahsun kam",
+            "less garlic"
+        ]
+    },
+    "onion_on_side": {
+        "meaning": "onion on the side",
+        "keywords": [
+            "dungli side ma",
+            "pyaz side mein",
+            "onion on side",
+            "side onion"
+        ]
+    },
+    "garlic_on_side": {
+        "meaning": "garlic on the side",
+        "keywords": [
+            "lasan side ma",
+            "lahsun side mein",
+            "garlic on side"
+        ]
+    },
+    "jain_preparation": {
+        "meaning": "jain style preparation",
+        "keywords": [
+            "jain banavo",
+            "jain style",
+            "jain gravy",
+            "jain bhaji",
+            "jain pizza",
+            "jain noodles",
+            "jain bhat",
+            "jain biryani",
+            "dungli lasan vagar banavo",
+            "jain masala",
+            "jain banao",
+            "jain preparation",
+            "make it jain",
+            "jain food"
+        ]
+    },
+    "extra_gravy": {
+        "meaning": "more gravy",
+        "keywords": [
+            "gravy vadhare",
+            "raso vadhare",
+            "gravy zyada",
+            "aur gravy",
+            "extra gravy",
+            "more gravy"
+        ]
+    },
+    "less_gravy": {
+        "meaning": "less gravy",
+        "keywords": [
+            "gravy ochi",
+            "gravy kam",
+            "less gravy"
+        ]
+    },
+    "no_gravy": {
+        "meaning": "no gravy",
+        "keywords": [
+            "gravy vagar",
+            "bina gravy",
+            "no gravy",
+            "without gravy"
+        ]
+    },
+    "dry_preparation": {
+        "meaning": "dry preparation",
+        "keywords": [
+            "dry banavo",
+            "sukhi",
+            "dry banao",
+            "sookha",
+            "make it dry",
+            "dry"
+        ]
+    },
+    "semi_dry": {
+        "meaning": "semi dry",
+        "keywords": [
+            "semi dry",
+            "thodu dry",
+            "semi dry banao",
+            "half dry"
+        ]
+    },
+    "thick_gravy": {
+        "meaning": "thick gravy",
+        "keywords": [
+            "ghati gravy",
+            "thick gravy",
+            "ghani gravy",
+            "gaadhi gravy"
+        ]
+    },
+    "thin_gravy": {
+        "meaning": "thin gravy",
+        "keywords": [
+            "patali gravy",
+            "patli gravy",
+            "thin gravy"
+        ]
+    },
+    "extra_sauce": {
+        "meaning": "more sauce",
+        "keywords": [
+            "sauce vadhare",
+            "extra sauce",
+            "sauce zyada",
+            "more sauce"
+        ]
+    },
+    "less_sauce": {
+        "meaning": "less sauce",
+        "keywords": [
+            "sauce ochu",
+            "sauce kam",
+            "less sauce"
+        ]
+    },
+    "no_sauce": {
+        "meaning": "no sauce",
+        "keywords": [
+            "sauce vagar",
+            "bina sauce",
+            "no sauce",
+            "without sauce"
+        ]
+    },
+    "extra_schezwan": {
+        "meaning": "extra schezwan sauce",
+        "keywords": [
+            "schezwan sauce vadhare",
+            "schezwan zyada",
+            "extra schezwan",
+            "more schezwan"
+        ]
+    },
+    "extra_soy": {
+        "meaning": "extra soy sauce",
+        "keywords": [
+            "soya sauce vadhare",
+            "soya zyada",
+            "extra soy sauce"
+        ]
+    },
+    "extra_chili_sauce": {
+        "meaning": "extra chili sauce",
+        "keywords": [
+            "chili sauce vadhare",
+            "chili sauce zyada",
+            "extra chili sauce"
+        ]
+    },
+    "extra_vinegar": {
+        "meaning": "extra vinegar",
+        "keywords": [
+            "vinegar vadhare",
+            "vinegar zyada",
+            "extra vinegar"
+        ]
+    },
+    "extra_garlic_sauce": {
+        "meaning": "extra garlic sauce",
+        "keywords": [
+            "garlic sauce vadhare",
+            "garlic sauce zyada",
+            "extra garlic sauce"
+        ]
+    },
+    "extra_manchurian_sauce": {
+        "meaning": "extra manchurian sauce",
+        "keywords": [
+            "manchurian sauce vadhare",
+            "manchurian sauce zyada",
+            "extra manchurian sauce"
+        ]
+    },
+    "less_schezwan": {
+        "meaning": "less schezwan",
+        "keywords": [
+            "schezwan ochu",
+            "schezwan kam",
+            "less schezwan"
+        ]
+    },
+    "less_soy": {
+        "meaning": "less soy",
+        "keywords": [
+            "soya ochu",
+            "soya kam",
+            "less soy sauce"
+        ]
+    },
+    "less_chili_sauce": {
+        "meaning": "less chili sauce",
+        "keywords": [
+            "chili sauce ochu",
+            "chili sauce kam",
+            "less chili sauce"
+        ]
+    },
+    "mix_sauces": {
+        "meaning": "mix sauces",
+        "keywords": [
+            "sauce mix karo",
+            "sauce mila do",
+            "mix sauce"
+        ]
+    },
+    "extra_capsicum": {
+        "meaning": "extra capsicum",
+        "keywords": [
+            "capsicum vadhare",
+            "shimla mirch zyada",
+            "extra capsicum"
+        ]
+    },
+    "less_capsicum": {
+        "meaning": "less capsicum",
+        "keywords": [
+            "capsicum ochu",
+            "shimla mirch kam",
+            "less capsicum"
+        ]
+    },
+    "extra_tomato": {
+        "meaning": "extra tomato",
+        "keywords": [
+            "tameta vadhare",
+            "tamatar zyada",
+            "extra tomato"
+        ]
+    },
+    "less_tomato": {
+        "meaning": "less tomato",
+        "keywords": [
+            "tameta ocha",
+            "tamatar kam",
+            "less tomato"
+        ]
+    },
+    "extra_corn": {
+        "meaning": "extra corn",
+        "keywords": [
+            "makai vadhare",
+            "corn zyada",
+            "extra corn",
+            "more corn"
+        ]
+    },
+    "less_corn": {
+        "meaning": "less corn",
+        "keywords": [
+            "makai ochu",
+            "corn kam",
+            "less corn"
+        ]
+    },
+    "extra_mushroom": {
+        "meaning": "extra mushroom",
+        "keywords": [
+            "mushroom vadhare",
+            "mushroom zyada",
+            "extra mushroom"
+        ]
+    },
+    "less_mushroom": {
+        "meaning": "less mushroom",
+        "keywords": [
+            "mushroom ochu",
+            "mushroom kam",
+            "less mushroom"
+        ]
+    },
+    "extra_paneer": {
+        "meaning": "extra paneer",
+        "keywords": [
+            "paneer vadhare",
+            "double paneer",
+            "paneer topping",
+            "paneer chunks",
+            "paneer loaded",
+            "paneer crush",
+            "paneer gravy vadhare",
+            "paneer zyada",
+            "aur paneer",
+            "extra paneer",
+            "more paneer"
+        ]
+    },
+    "less_paneer": {
+        "meaning": "less paneer",
+        "keywords": [
+            "paneer ochu",
+            "paneer kam",
+            "less paneer"
+        ]
+    },
+    "extra_carrot": {
+        "meaning": "extra carrot",
+        "keywords": [
+            "gajar vadhare",
+            "gajar zyada",
+            "extra carrot"
+        ]
+    },
+    "less_carrot": {
+        "meaning": "less carrot",
+        "keywords": [
+            "gajar ochu",
+            "gajar kam",
+            "less carrot"
+        ]
+    },
+    "extra_cabbage": {
+        "meaning": "extra cabbage",
+        "keywords": [
+            "kobi vadhare",
+            "patta gobi zyada",
+            "extra cabbage"
+        ]
+    },
+    "less_cabbage": {
+        "meaning": "less cabbage",
+        "keywords": [
+            "kobi ochu",
+            "patta gobi kam",
+            "less cabbage"
+        ]
+    },
+    "extra_peas": {
+        "meaning": "extra peas",
+        "keywords": [
+            "vatana vadhare",
+            "matar zyada",
+            "extra peas"
+        ]
+    },
+    "less_peas": {
+        "meaning": "less peas",
+        "keywords": [
+            "vatana ochu",
+            "matar kam",
+            "less peas"
+        ]
+    },
+    "extra_mix_veg": {
+        "meaning": "extra mix veg",
+        "keywords": [
+            "mix veg vadhare",
+            "mix veg zyada",
+            "extra mix veg"
+        ]
+    },
+    "less_mix_veg": {
+        "meaning": "less mix veg",
+        "keywords": [
+            "mix veg ochu",
+            "mix veg kam",
+            "less mix veg"
+        ]
+    },
+    "extra_sambar": {
+        "meaning": "extra sambar",
+        "keywords": [
+            "sambar vadhare",
+            "sambhar zyada",
+            "extra sambar"
+        ]
+    },
+    "less_sambar": {
+        "meaning": "less sambar",
+        "keywords": [
+            "sambar ochu",
+            "sambhar kam",
+            "less sambar"
+        ]
+    },
+    "no_sambar": {
+        "meaning": "no sambar",
+        "keywords": [
+            "sambar vagar",
+            "bina sambhar",
+            "no sambar"
+        ]
+    },
+    "extra_chutney": {
+        "meaning": "extra chutney",
+        "keywords": [
+            "chatni vadhare",
+            "chutney zyada",
+            "extra chutney"
+        ]
+    },
+    "less_chutney": {
+        "meaning": "less chutney",
+        "keywords": [
+            "chatni ochu",
+            "chutney kam",
+            "less chutney"
+        ]
+    },
+    "extra_coconut_chutney": {
+        "meaning": "extra coconut chutney",
+        "keywords": [
+            "naliyer chatni vadhare",
+            "nariyal chutney zyada",
+            "extra coconut chutney"
+        ]
+    },
+    "less_coconut_chutney": {
+        "meaning": "less coconut chutney",
+        "keywords": [
+            "naliyer chatni ochu",
+            "nariyal chutney kam",
+            "less coconut chutney"
+        ]
+    },
+    "extra_green_chutney": {
+        "meaning": "extra green chutney",
+        "keywords": [
+            "lili chatni vadhare",
+            "hari chutney zyada",
+            "extra green chutney"
+        ]
+    },
+    "less_green_chutney": {
+        "meaning": "less green chutney",
+        "keywords": [
+            "lili chatni ochu",
+            "hari chutney kam",
+            "less green chutney"
+        ]
+    },
+    "extra_red_chutney": {
+        "meaning": "extra red chutney",
+        "keywords": [
+            "lal chatni vadhare",
+            "laal chutney zyada",
+            "extra red chutney"
+        ]
+    },
+    "less_red_chutney": {
+        "meaning": "less red chutney",
+        "keywords": [
+            "lal chatni ochu",
+            "laal chutney kam",
+            "less red chutney"
+        ]
+    },
+    "extra_garlic_chutney": {
+        "meaning": "extra garlic chutney",
+        "keywords": [
+            "lasan chatni vadhare",
+            "lahsun chutney zyada",
+            "extra garlic chutney"
+        ]
+    },
+    "extra_mint_chutney": {
+        "meaning": "extra mint chutney",
+        "keywords": [
+            "pudina chatni vadhare",
+            "pudina chutney zyada",
+            "extra mint chutney"
+        ]
+    },
+    "extra_tomato_chutney": {
+        "meaning": "extra tomato chutney",
+        "keywords": [
+            "tameta chatni vadhare",
+            "tamatar chutney zyada",
+            "extra tomato chutney"
+        ]
+    },
+    "lasaniya": {
+        "meaning": "lasaniya style",
+        "keywords": [
+            "lasaniya banavo",
+            "lasaniya style",
+            "garlicky style"
+        ]
+    },
+    "add_sev": {
+        "meaning": "add sev",
+        "keywords": [
+            "sev nakho",
+            "sev dalo",
+            "add sev"
+        ]
+    },
+    "extra_sev": {
+        "meaning": "extra sev",
+        "keywords": [
+            "sev vadhare",
+            "sev zyada",
+            "extra sev"
+        ]
+    },
+    "less_sev": {
+        "meaning": "less sev",
+        "keywords": [
+            "sev ochu",
+            "sev kam",
+            "less sev"
+        ]
+    },
+    "ghee_kathiyawadi": {
+        "meaning": "ghee kathiyawadi style",
+        "keywords": [
+            "ghee kathiyawadi",
+            "kathiyawadi style ghee"
+        ]
+    },
+    "butter_kathiyawadi": {
+        "meaning": "butter kathiyawadi style",
+        "keywords": [
+            "butter kathiyawadi",
+            "kathiyawadi style butter"
+        ]
+    },
+    "kathiyawadi_style": {
+        "meaning": "kathiyawadi style",
+        "keywords": [
+            "kathiyawadi style",
+            "saurashtra style"
+        ]
+    },
+    "butter_naan": {
+        "meaning": "butter naan",
+        "keywords": [
+            "butter naan"
+        ]
+    },
+    "garlic_naan": {
+        "meaning": "garlic naan",
+        "keywords": [
+            "garlic naan"
+        ]
+    },
+    "cheese_naan": {
+        "meaning": "cheese naan",
+        "keywords": [
+            "cheese naan"
+        ]
+    },
+    "butter_roti": {
+        "meaning": "butter roti",
+        "keywords": [
+            "butter rotli",
+            "butter roti"
+        ]
+    },
+    "ghee_on_roti": {
+        "meaning": "ghee on roti",
+        "keywords": [
+            "rotli par ghee",
+            "roti par ghee",
+            "ghee wali roti"
+        ]
+    },
+    "ghee_roti": {
+        "meaning": "ghee roti",
+        "keywords": [
+            "ghee rotli",
+            "ghee roti"
+        ]
+    },
+    "soft_roti": {
+        "meaning": "soft roti",
+        "keywords": [
+            "naram rotli",
+            "naram roti",
+            "soft roti"
+        ]
+    },
+    "crispy_roti": {
+        "meaning": "crispy roti",
+        "keywords": [
+            "karkari rotli",
+            "kurkuri roti",
+            "crispy roti"
+        ]
+    },
+    "thin_roti": {
+        "meaning": "thin roti",
+        "keywords": [
+            "patali rotli",
+            "patli roti",
+            "thin roti",
+            "phulka"
+        ]
+    },
+    "thick_roti": {
+        "meaning": "thick roti",
+        "keywords": [
+            "moti rotli",
+            "moti roti",
+            "thick roti"
+        ]
+    },
+    "fresh_roti": {
+        "meaning": "fresh roti",
+        "keywords": [
+            "taji rotli",
+            "taaza roti",
+            "fresh roti"
+        ]
+    },
+    "hot_roti": {
+        "meaning": "hot roti",
+        "keywords": [
+            "garam rotli",
+            "garam roti",
+            "hot roti"
+        ]
+    },
+    "schezwan_rice": {
+        "meaning": "schezwan rice",
+        "keywords": [
+            "schezwan bhat",
+            "schezwan rice"
+        ]
+    },
+    "with_manchurian": {
+        "meaning": "with manchurian",
+        "keywords": [
+            "manchurian sathe",
+            "manchurian ke sath",
+            "with manchurian"
+        ]
+    },
+    "paneer_rice": {
+        "meaning": "paneer rice",
+        "keywords": [
+            "paneer bhat",
+            "paneer rice"
+        ]
+    },
+    "gravy_rice": {
+        "meaning": "gravy rice",
+        "keywords": [
+            "gravy bhat",
+            "gravy rice"
+        ]
+    },
+    "less_rice": {
+        "meaning": "less rice",
+        "keywords": [
+            "bhat ochu",
+            "chawal kam",
+            "less rice"
+        ]
+    },
+    "extra_rice": {
+        "meaning": "extra rice",
+        "keywords": [
+            "bhat vadhare",
+            "chawal zyada",
+            "extra rice"
+        ]
+    },
+    "fried_rice_dry": {
+        "meaning": "fried rice dry",
+        "keywords": [
+            "fried rice dry",
+            "dry fried rice"
+        ]
+    },
+    "fried_rice_with_sauce": {
+        "meaning": "fried rice with sauce",
+        "keywords": [
+            "fried rice sauce sathe",
+            "fried rice sauce ke sath",
+            "fried rice with sauce"
+        ]
+    },
+    "make_crispy": {
+        "meaning": "make it crispy",
+        "keywords": [
+            "karkaro banavo",
+            "kurkura banao",
+            "make it crispy"
+        ]
+    },
+    "very_crispy": {
+        "meaning": "very crispy",
+        "keywords": [
+            "khub karkaro",
+            "vadhare karkaro",
+            "bahut kurkura",
+            "extra crispy"
+        ]
+    },
+    "make_soft": {
+        "meaning": "make it soft",
+        "keywords": [
+            "naram banavo",
+            "soft rakhjo",
+            "soft banavo",
+            "naram banao",
+            "make it soft"
+        ]
+    },
+    "light_roast": {
+        "meaning": "light roast",
+        "keywords": [
+            "light roast",
+            "kam sako",
+            "kam seka hua"
+        ]
+    },
+    "dark_roast": {
+        "meaning": "dark roast",
+        "keywords": [
+            "dark roast",
+            "vadhare sako",
+            "zyada seka hua"
+        ]
+    },
+    "slightly_crispy": {
+        "meaning": "slightly crispy",
+        "keywords": [
+            "thodu karkaro",
+            "thoda kurkura",
+            "slightly crispy"
+        ]
+    },
+    "half_plate": {
+        "meaning": "half plate",
+        "keywords": [
+            "half plate",
+            "adhi plate"
+        ]
+    },
+    "full_plate": {
+        "meaning": "full plate",
+        "keywords": [
+            "full plate",
+            "puri plate"
+        ]
+    },
+    "extra_portion": {
+        "meaning": "extra portion",
+        "keywords": [
+            "extra portion",
+            "vadhare portion"
+        ]
+    },
+    "double_portion": {
+        "meaning": "double portion",
+        "keywords": [
+            "double portion",
+            "do guna"
+        ]
+    },
+    "family_pack": {
+        "meaning": "family pack",
+        "keywords": [
+            "family pack"
+        ]
+    },
+    "large_portion": {
+        "meaning": "large portion",
+        "keywords": [
+            "motu portion",
+            "bada portion",
+            "large portion"
+        ]
+    },
+    "small_portion": {
+        "meaning": "small portion",
+        "keywords": [
+            "nanu portion",
+            "chhota portion",
+            "small portion"
+        ]
+    },
+    "extra_lemon": {
+        "meaning": "extra lemon",
+        "keywords": [
+            "limbu vadhare",
+            "nimbu zyada",
+            "extra lemon"
+        ]
+    },
+    "less_lemon": {
+        "meaning": "less lemon",
+        "keywords": [
+            "limbu ochu",
+            "nimbu kam",
+            "less lemon"
+        ]
+    },
+    "lemon_on_side": {
+        "meaning": "lemon on the side",
+        "keywords": [
+            "limbu side ma",
+            "nimbu side mein",
+            "lemon on side"
+        ]
+    },
+    "extra_salt": {
+        "meaning": "extra salt",
+        "keywords": [
+            "mithu vadhare",
+            "namak zyada",
+            "extra salt"
+        ]
+    },
+    "less_salt": {
+        "meaning": "less salt",
+        "keywords": [
+            "mithu ochu",
+            "namak kam",
+            "less salt"
+        ]
+    },
+    "no_salt": {
+        "meaning": "no salt",
+        "keywords": [
+            "mithu vagar",
+            "bina namak",
+            "no salt",
+            "without salt"
+        ]
+    },
+    "extra_chaat_masala": {
+        "meaning": "extra chaat masala",
+        "keywords": [
+            "chaat masalo vadhare",
+            "chaat masala zyada",
+            "extra chaat masala"
+        ]
+    },
+    "less_chaat_masala": {
+        "meaning": "less chaat masala",
+        "keywords": [
+            "chaat masalo ochu",
+            "chaat masala kam",
+            "less chaat masala"
+        ]
+    },
+    "extra_black_pepper": {
+        "meaning": "extra black pepper",
+        "keywords": [
+            "kali mari vadhare",
+            "kali mirch zyada",
+            "extra black pepper"
+        ]
+    },
+    "less_black_pepper": {
+        "meaning": "less black pepper",
+        "keywords": [
+            "kali mari ochu",
+            "kali mirch kam",
+            "less black pepper"
+        ]
+    },
+    "extra_coriander": {
+        "meaning": "extra coriander",
+        "keywords": [
+            "dhana vadhare",
+            "dhaniya zyada",
+            "extra coriander",
+            "more cilantro"
+        ]
+    },
+    "less_coriander": {
+        "meaning": "less coriander",
+        "keywords": [
+            "dhana ochu",
+            "dhaniya kam",
+            "less coriander"
+        ]
+    },
+    "extra_ginger": {
+        "meaning": "extra ginger",
+        "keywords": [
+            "aadu vadhare",
+            "adrak zyada",
+            "extra ginger"
+        ]
+    },
+    "less_ginger": {
+        "meaning": "less ginger",
+        "keywords": [
+            "aadu ochu",
+            "adrak kam",
+            "less ginger"
+        ]
+    },
+    "butter_topping": {
+        "meaning": "butter topping",
+        "keywords": [
+            "butter topping"
+        ]
+    },
+    "masala_topping": {
+        "meaning": "masala topping",
+        "keywords": [
+            "masala topping"
+        ]
+    },
+    "extra_red_chili_powder": {
+        "meaning": "extra red chili powder",
+        "keywords": [
+            "lal chili powder vadhare",
+            "laal mirch powder zyada",
+            "extra red chili powder"
+        ]
+    },
+    "less_red_chili_powder": {
+        "meaning": "less red chili powder",
+        "keywords": [
+            "lal chili powder ochu",
+            "laal mirch powder kam",
+            "less red chili powder"
+        ]
+    },
+    "deep_fried": {
+        "meaning": "deep fried",
+        "keywords": [
+            "Talelu banavo",
+            "tala hua banao",
+            "deep fried"
+        ]
+    },
+    "less_fried": {
+        "meaning": "less fried",
+        "keywords": [
+            "ochu talelu",
+            "kam tala hua",
+            "less fried",
+            "shallow fried"
+        ]
+    },
+    "extra_fried": {
+        "meaning": "extra fried",
+        "keywords": [
+            "vadhare talelu",
+            "zyada tala hua",
+            "extra fried"
+        ]
+    },
+    "serve_hot": {
+        "meaning": "serve hot",
+        "keywords": [
+            "garam pirso",
+            "garam paroso",
+            "serve hot"
+        ]
+    },
+    "serve_slightly_cold": {
+        "meaning": "serve slightly cold",
+        "keywords": [
+            "thodu thandu",
+            "thoda thanda",
+            "serve slightly cold"
+        ]
+    },
+    "extra_bhature": {
+        "meaning": "add extra bhature",
+        "keywords": [
+            "extra bhature",
+            "bhature vadhare",
+            "ek bhature",
+            "be bhature",
+            "bhatura",
+            "bhature"
+        ]
+    },
+    "extra_pav": {
+        "meaning": "add extra pav",
+        "keywords": [
+            "extra pav",
+            "pav vadhare",
+            "jodi pav",
+            "pav ni jodi",
+            "pav"
+        ]
+    },
+    "extra_puri": {
+        "meaning": "add extra puri",
+        "keywords": [
+            "extra puri",
+            "puri vadhare",
+            "be puri",
+            "tran puri",
+            "puri"
+        ]
+    },
+    "extra_papad": {
+        "meaning": "add extra papad",
+        "keywords": [
+            "extra papad",
+            "papad vadhare",
+            "ek papad",
+            "papad"
+        ]
+    }
+}

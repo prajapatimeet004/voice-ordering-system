@@ -371,6 +371,32 @@ def fuzzy_match_dish(dish_name: str):
     """
     return match_dish_with_embeddings(dish_name)
 
+# Pre-defined Response Schema for Order Classification
+CLASSIFICATION_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "items": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "dish": {"type": "STRING", "description": "Dish name exactly from transcript"},
+                    "quantity": {"type": "INTEGER", "description": "Number of units"},
+                    "portion": {"type": "STRING", "enum": ["full", "half", "quarter"], "description": "Size/Portion of the dish"},
+                    "modifier": {"type": "STRING", "enum": ["set", "increase", "decrease"], "description": "Change type (set/increase/decrease)"},
+                    "raw_addons": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Customization phrases for this dish"}
+                },
+                "required": ["dish", "quantity", "portion", "modifier", "raw_addons"]
+            }
+        },
+        "is_finished": {"type": "BOOLEAN", "description": "True if user is done ordering"},
+        "intent": {"type": "STRING", "enum": ["affirmative", "negative", "inquiry", "none"], "description": "User intent (yes/no/question)"},
+        "response_text": {"type": "STRING", "description": "Friendly response from Pooja"},
+        "language_code": {"type": "STRING", "description": "Sarvam AI language code (hi-IN, gu-IN, etc.)"}
+    },
+    "required": ["items", "is_finished", "intent", "response_text", "language_code"]
+}
+
 def classify_order(transcript: str):
     """
     Classifies a voice order transcript into a structured JSON format 
@@ -422,43 +448,8 @@ def classify_order(transcript: str):
     9. PORTIONS & MODIFIERS:
        - portions: "half", "quarter", "full", "ardhu" (half), "pav" (quarter), "ek" (single/full).
        - modifiers: "vadhare" (more/increase), "ochu" (less/decrease), "ek vadhari do" (+1), "ek ochu karo" (-1).
-    10. Output ONLY a clean JSON object with the following structure:
-       {{
-         "items": [
-           {{
-             "dish": "string", 
-             "quantity": integer (default 1), 
-             "portion": "full" | "half" | "quarter" (default "full"),
-             "modifier": "set" | "increase" | "decrease" (default "set"),
-             "raw_addons": ["string"]
-           }}
-         ],
-         "is_finished": boolean (default false),
-         "intent": "affirmative" | "negative" | "inquiry" | null (default null),
-         "response_text": "string",
-         "language_code": "hi-IN" | "gu-IN" | "en-IN" etc.
-       }}
-    
-    11. Rules for Fields:
-        - "items": List of dishes extracted.
-        - "dish": string (EXACTLY from transcript, PRESERVE local language)
-        - "quantity": integer (default 1)
-        - "portion": string ("half", "quarter", "full") - Detect from words like "pav", "ardhu", "half".
-        - "modifier": "increase" if words like "vadhare" or "extra" used; "decrease" if "ochu" or "ocho" used; else "set".
-        - "raw_addons": list of strings (phrases used for customization from transcript, EXACTLY as spoken, PRESERVE Gujarati/Hindi, NO TRANSLATION)
-        - "is_finished": true only if "done", "bus", etc. detected.
-        - "intent": "affirmative" if "yes", "haan" etc. detected; "negative" if "no", "nahi" etc. detected; "inquiry" for questions.
-        - "response_text": A friendly, concierge-like response from 'Pooja' in the SAME language as the transcript. (e.g., "Theek hai, aapka order..." or "Saru, tamaro order...").
-        - "language_code": The Sarvam AI language code for the transcript (gu-IN for Gujarati, hi-IN for Hindi, en-IN for English, mr-IN for Marathi).
-
-    11. FINISHING INTENT: Detect if the user is finished with the entire order. 
-        - Indicators: "done", "ok", "bus", "ajj", "bas", "bas itna hi", "bas ho gaya", "finish", "no more", "itna hi chahiye".
-        - If detected, set a top-level boolean key "is_finished" to true.
- 
-    12. CONFIRMATION INTENT: Detect if the user is saying "yes" or "no" to a previous question.
-        - Yes Indicators: "yes", "ha", "haan", "haji", "ok", "theek hai", "sahi hai", "correct", "yep", "yeah".
-        - No Indicators: "no", "nahi", "na", "naji", "galat", "wrong", "nope".
-        - If "yes" detected, set "intent" to "affirmative". If "no", set "intent" to "negative".
+    11. FINISHING INTENT: Detect words like "done", "ok", "bus", "ajj", "bas itna hi".
+    12. CONFIRMATION INTENT: Detect "yes"/"no" indicators.
  
     13. PERSONA (POOJA): You are Pooja, a warm and efficient restaurant concierge. Speak naturally and politely.
  
@@ -496,17 +487,25 @@ def classify_order(transcript: str):
     try:
         full_prompt = system_prompt + f"\n\nUser Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}"
         response = model.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=full_prompt
+            model="gemini-flash-latest",
+            contents=full_prompt,
+            config={
+                'response_mime_type': 'application/json',
+                'response_schema': CLASSIFICATION_SCHEMA
+            }
         )
 
-        result_content = response.text
-        # Extract JSON from potential <think> or ``` markdown blocks
-        clean_json = extract_json(result_content)
-        parsed_data = json.loads(clean_json)
+        # With response_schema, we get direct attribute access or a simple dict
+        parsed_data = response.parsed
+        # If model doesn't support 'parsed' (depending on SDK version), fallback to json.loads(response.text)
+        if not parsed_data:
+            text_content = response.text
+            clean_json = extract_json(text_content)
+            parsed_data = json.loads(clean_json)
+            
         extracted_data = parsed_data.get("items", [])
         is_finished = parsed_data.get("is_finished", False)
-        intent = parsed_data.get("intent", None)
+        intent = parsed_data.get("intent", "none")
         
         final_order_result = {
             "items": [], # Preserve the structured items
