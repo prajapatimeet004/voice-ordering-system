@@ -81,7 +81,7 @@ CORRECTION_DICT = {
         "ek vadhare", "be vadhare", "vadhari do", "ek add karo", 
         "ek aur add karo", "thodu extra muki do", "extra muki do", 
         "biju ek muki do", "ek aur muki do", "thodu vadhu kari do", 
-        "ek plate vadhare", "ek item vadhare",
+        "ek plate vadhare", "ek item vadhare", "vadhare", "zyada", "increase", "extra", "vadhari do", "vadhu", "add",
         # English
         "make it two", "make it three", "change to two", "increase quantity",
         "decrease quantity", "add one more", "only one"

@@ -476,9 +476,10 @@ def classify_order(transcript: str):
         - For BILL, PRICE, TIME, or TABLE questions, use this RESTAURANT_INFO: {json.dumps(RESTAURANT_INFO)}
         - Always respond in a friendly Gujlish (Gujarati-English) voice style.
         - CRITICAL: Extract EVERY dish mentioned as an order item unless the user explicitly says they DON'T want it.
-        - NEGATIONS: If a user says "nathi joie", "vagarna", or "no [addon]", include that exact phrase in "raw_addons". 
+        - NEGATIONS & MODIFICATIONS: If a user says "nathi joie", "vagarna", "no [addon]", "badle", "instead of", or any other word expressing a change or removal, include the ENTIRE phrase in "raw_addons". 
           - Example: "extra butter na rakhvani" -> raw_addons: ["extra butter na rakhvani"].
-          - DO NOT set modifier to "increase" if the user is NEGATING the extra (e.g., "no extra butter" should be modifier "set" with negation in raw_addons).
+          - Example: "spicy badle medium spicy" -> raw_addons: ["spicy badle medium spicy"].
+          - DO NOT set modifier to "increase" if the user is NEGATING the extra (e.g., "no extra butter" should be modifier "set").
 
     CRITICAL: ALWAYS extract the QUANTITY as a separate integer. NEVER include "10", "one", "ek", etc. in the "dish" string.
     CRITICAL JSON RULE: Your entire response MUST be a single, valid JSON object. 

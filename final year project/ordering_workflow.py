@@ -58,14 +58,10 @@ async def transcribe_audio(file_path, noise_profile_bytes=None):
     return transcript, processed_audio_bytes, chunks_data
 
 def is_correction_phrase(text):
-    """Checks if a phrase contains words indicating negation or replacement."""
-    correction_words = [
-        "no", "not", "without", "remove", "delete", "instead", "replace",
-        "nahi", "nathi", "nai", "na", "vagarna", "badle", "rehne do", "hatao", "kadhi",
-        "na rakhjo", "na rakhvun", "na nakho", "vagar", "eni jagyae", "enabade"
-    ]
-    text_lower = text.lower()
-    return any(word in text_lower for word in correction_words)
+    """Checks if a phrase contains words indicating negation or replacement using semantic similarity."""
+    from correction_service import detect_correction
+    # We use a slightly lower threshold for individual phrases
+    return detect_correction(text, threshold=0.85)
 
 def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
     """

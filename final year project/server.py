@@ -370,4 +370,4 @@ async def toggle_availability(dish_name: str = Form(...), available: bool = Form
 if __name__ == "__main__":
     import uvicorn
     # Use string import path to enable reload
-    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True, reload_dirs=["."])
