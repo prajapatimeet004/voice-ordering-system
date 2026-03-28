@@ -86,17 +86,19 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
                 # 1. Handle removal of original if it exists
                 if orig_dish:
                     mapped_orig, score_orig = fuzzy_match_dish(orig_dish)
-                    target_orig = mapped_orig if (score_orig > 0.5 and mapped_orig in final_confirmed_order) else (orig_dish if orig_dish in final_confirmed_order else None)
+                    # Aggressive strip and match
+                    target_orig = mapped_orig.strip() if (score_orig > 0.6 and mapped_orig.strip() in final_confirmed_order) else (orig_dish.strip() if orig_dish.strip() in final_confirmed_order else None)
                     if target_orig:
                         del final_confirmed_order[target_orig]
                         changed = True
-                        print(f"DEBUG Correction: Removed '{target_orig}'")
+                        print(f"DEBUG Correction: Removed '{target_orig}' during modification-replacement")
                 
                 # 2. Handle addition of new dish
                 if new_dish:
                     mapped_new, score_new = fuzzy_match_dish(new_dish)
+                    mapped_new = mapped_new.strip()
                     # STRICT ENFORCEMENT: Only add if it's in the menu
-                    if score_new > 0.5:
+                    if score_new > 0.6:
                         existing_val = final_confirmed_order.get(mapped_new, {"quantity": 0, "addons": []})
                         if not isinstance(existing_val, dict): existing_val = {"quantity": existing_val, "addons": []}
                         
@@ -136,12 +138,18 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
                                 if not is_correction_phrase(na):
                                     final_addons.append(na)
                         
-                        final_confirmed_order[mapped_new] = {
-                            "quantity": final_qty, 
-                            "addons": list(set(final_addons))
-                        }
-                        changed = True
-                        print(f"DEBUG Correction: Added/Updated '{mapped_new}' to qty {final_qty}")
+                        if final_qty <= 0:
+                            if mapped_new in final_confirmed_order:
+                                del final_confirmed_order[mapped_new]
+                                changed = True
+                                print(f"DEBUG Correction: Removed '{mapped_new}' (Quantity reached 0 during modification)")
+                        else:
+                            final_confirmed_order[mapped_new] = {
+                                "quantity": final_qty, 
+                                "addons": list(set(final_addons))
+                            }
+                            changed = True
+                            print(f"DEBUG Correction: Added/Updated '{mapped_new}' to qty {final_qty}")
                     else:
                         print(f"DEBUG Correction: REJECTED '{new_dish}' (Not in menu, score {score_new:.2f})")
             else:
@@ -176,9 +184,7 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
 
                     # Handle raw_addons list
                     for na in new_addons_list:
-                        # Skip if already handled by explicit replacement
                         if na == new_addon_val: continue
-                        
                         match = process.extractOne(na, current_addons, scorer=fuzz.token_set_ratio) if current_addons else None
                         if match and match[1] > 70:
                             if is_correction_phrase(na):
@@ -189,11 +195,16 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
                             if not is_correction_phrase(na):
                                 final_addons.append(na)
 
-                    val["quantity"] = final_qty
-                    val["addons"] = list(set(final_addons))
-                    final_confirmed_order[target_dish] = val
-                    changed = True
-                    print(f"DEBUG Correction: Updated '{target_dish}' to qty {final_qty}")
+                    if final_qty <= 0:
+                        del final_confirmed_order[target_dish]
+                        changed = True
+                        print(f"DEBUG Correction: Removed '{target_dish}' (Quantity reached 0 during modifier-only update)")
+                    else:
+                        val["quantity"] = final_qty
+                        val["addons"] = list(set(final_addons))
+                        final_confirmed_order[target_dish] = val
+                        changed = True
+                        print(f"DEBUG Correction: Updated '{target_dish}' to qty {final_qty}")
                 else:
                     # IF DISH NOT IN CART: Add as a new item if it's in the menu
                     if score > 0.5:
@@ -232,10 +243,15 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
                 else:
                     final_qty = qty
                 
-                val["quantity"] = final_qty
-                final_confirmed_order[target_dish] = val
-                changed = True
-                print(f"DEBUG Correction: Changed quantity of '{target_dish}' to {final_qty}")
+                if final_qty <= 0:
+                    del final_confirmed_order[target_dish]
+                    changed = True
+                    print(f"DEBUG Correction: Removed '{target_dish}' (Quantity change to 0)")
+                else:
+                    val["quantity"] = final_qty
+                    final_confirmed_order[target_dish] = val
+                    changed = True
+                    print(f"DEBUG Correction: Changed quantity of '{target_dish}' to {final_qty}")
 
         elif action == "cancel_all":
             final_confirmed_order.clear()

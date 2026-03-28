@@ -3,19 +3,31 @@ import json
 import re
 from dotenv import load_dotenv
 from classifier_service import fuzzy_match_dish
+from groq import Groq
+import inventory_service
 
 load_dotenv(override=True)
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GROQ_API_KEY") or os.getenv("SARVAM_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY") or os.getenv("GEMINI_API_KEY")
 
-if not GEMINI_API_KEY:
-    raise ValueError("❌ No API key found in .env (expected GEMINI_API_KEY)")
+if not GROQ_API_KEY:
+    raise ValueError("❌ No API key found in .env (expected GROQ_API_KEY)")
+
+_groq_client = None
+
+def get_groq_client():
+    global _groq_client
+    if _groq_client is None:
+        _groq_client = Groq(api_key=GROQ_API_KEY)
+    return _groq_client
 
 _gemini_model = None
 
 def get_gemini_model():
+    """Fallback Gemini model if needed."""
     global _gemini_model
     if _gemini_model is None:
         from google import genai
+        GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
         client = genai.Client(api_key=GEMINI_API_KEY)
         _gemini_model = client
     return _gemini_model
@@ -256,32 +268,24 @@ def process_correction(transcript: str, current_order_items=None):
     CRITICAL: If a user mentions multiple corrections (e.g., "don't add X, instead add Y"), you MUST provide separate entries or ensure all intents are captured. Every "nahi", "na", or "badle" intent must be reflected.
     """
 
-    model = get_gemini_model()
+    client = get_groq_client()
     try:
         full_prompt = system_prompt + f"\n\nCorrection Transcript: {transcript}"
-        response = model.models.generate_content(
-            model="gemini-flash-latest",
-            contents=full_prompt,
-            config={
-                'response_mime_type': 'application/json',
-                'response_schema': CORRECTION_SCHEMA
-            }
+        
+        # Groq Llama 3.3 70B call
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Correction Transcript: {transcript}"}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.1
         )
-
-        parsed_data = response.parsed
-        # Fallback to manual parsing if .parsed is not available or empty
-        if not parsed_data:
-            text_content = response.text
-            if not text_content or not text_content.strip():
-                print("WARNING: Gemini API returned empty response for correction processing.")
-                return []
-            clean_json = extract_json(text_content)
-            try:
-                parsed_data = json.loads(clean_json)
-            except json.JSONDecodeError as json_err:
-                print(f"WARNING: Could not parse correction JSON: {json_err}. Raw: {text_content[:200]}")
-                return []
-            
+        
+        text_content = completion.choices[0].message.content
+        clean_json = extract_json(text_content)
+        parsed_data = json.loads(clean_json)
         corrections = parsed_data.get("corrections", [])
         
         # Enhance corrections with matching scores and addons

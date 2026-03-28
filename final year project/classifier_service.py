@@ -5,19 +5,30 @@ from dotenv import load_dotenv
 from rapidfuzz import process, fuzz
 
 load_dotenv(override=True)
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GROQ_API_KEY") or os.getenv("SARVAM_API_KEY")
-
-if not GEMINI_API_KEY:
-    raise ValueError("❌ No API key found in .env (expected GEMINI_API_KEY)")
-
+from groq import Groq
 import inventory_service
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY") or os.getenv("GEMINI_API_KEY")
+
+if not GROQ_API_KEY:
+    raise ValueError("❌ No API key found in .env (expected GROQ_API_KEY)")
+
+_groq_client = None
+
+def get_groq_client():
+    global _groq_client
+    if _groq_client is None:
+        _groq_client = Groq(api_key=GROQ_API_KEY)
+    return _groq_client
 
 _gemini_model = None
 
 def get_gemini_model():
+    """Fallback Gemini model if needed."""
     global _gemini_model
     if _gemini_model is None:
         from google import genai
+        GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
         client = genai.Client(api_key=GEMINI_API_KEY)
         _gemini_model = client
     return _gemini_model
@@ -172,8 +183,74 @@ NUMBER_MAP = {
     # 100
     "hundred": 100,
     "one hundred": 100,
+    "one hundred": 100,
     "sau": 100,
 }
+
+# Portion Mapping for Standardization
+PORTION_MAP = {
+    "half": "half", "ardhu": "half", "1/2": "half", "aadha": "half", "adha": "half",
+    "quarter": "quarter", "pav": "quarter", "pau": "quarter", "1/4": "quarter", "pa": "quarter",
+    "full": "full", "ek": "full", "akhay": "full", "akha": "full", "single": "full"
+}
+
+def standardize_portion(raw_text: str):
+    """
+    Standardizes portion names (e.g., 'ardhu' -> 'half') using a predefined map.
+    Returns the standardized string or the original text if no match is found.
+    """
+    if not raw_text or not isinstance(raw_text, str):
+        return "full"
+    
+    raw_text = raw_text.lower().strip()
+    
+    # Direct match attempt
+    if raw_text in PORTION_MAP:
+        return PORTION_MAP[raw_text]
+    
+    # Fuzzy match for minor typos or variations
+    from rapidfuzz import process, fuzz
+    match = process.extractOne(raw_text, list(PORTION_MAP.keys()), scorer=fuzz.ratio)
+    if match and match[1] > 80:
+        return PORTION_MAP[match[0]]
+        
+    return raw_text
+
+# Intent Mapping for Standard Responses
+INTENT_MAP = {
+    "affirmative": [
+        "yes", "yeah", "yep", "yup", "sure", "ok", "okay", "ha", "haan", "theek hai", "thek hai", "ji", "chalshe", "chalse", "kar do", "thik che", "thik chhe"
+    ],
+    "negative": [
+        "no", "nope", "not that", "nahi", "na", "nathi", "nathi joitu", "nako", "nai"
+    ],
+    "finishing": [
+        "done", "finished", "that's it", "bus", "bas", "bas itna hi", "itna hi dena", "itlu j", "pachi nai", "bas avu j", "order confirm"
+    ]
+}
+
+def detect_intent(transcript: str):
+    """
+    Identifies if a short transcript matches a common intent (affirmative, negative, finishing)
+    using keyword matching. Returns (intent_name, confidence) or (None, 0).
+    """
+    if not transcript or len(transcript.split()) > 4: # Only for short responses
+        return None, 0
+    
+    transcript = re.sub(r'[^a-zA-Z0-9\s]', '', transcript.lower().strip())
+    
+    for intent, keywords in INTENT_MAP.items():
+        # Exact match
+        if transcript in keywords:
+            return intent, 1.0
+        
+        # Fuzzy match for typos
+        from rapidfuzz import process, fuzz
+        match = process.extractOne(transcript, keywords, scorer=fuzz.ratio)
+        if match and match[1] > 80:
+            return intent, 0.9
+
+    return None, 0
 
 def get_number_from_map(word: str):
     """
@@ -446,10 +523,8 @@ def classify_order(transcript: str):
     7. DISHES LIKE NAAN/ROTI: "Naan", "Roti", "Papad", "Chai" are almost always SEPARATE DISHES, not addons. Even if someone says "Curry sathe 2 Pan Naan", the "2 Pan Naan" is a separate item.
     8. CONTEXTUAL MODIFICATIONS MUST MERGE: If a user mentions the same dish multiple times specifically to add a modifier to it (e.g. "masala dosa... masala dosa thoda tikka rakhjo"), DO NOT increase the quantity. Instead, merge the modifier into the initial dish object and keep the quantity as 1.
     9. PORTIONS & MODIFIERS:
-       - portions: "half", "quarter", "full", "ardhu" (half), "pav" (quarter), "ek" (single/full).
+       - portions: The raw word for portion (e.g., "half", "quarter", "ardhu", "pav").
        - modifiers: "vadhare" (more/increase), "ochu" (less/decrease), "ek vadhari do" (+1), "ek ochu karo" (-1).
-    11. FINISHING INTENT: Detect words like "done", "ok", "bus", "ajj", "bas itna hi".
-    12. CONFIRMATION INTENT: Detect "yes"/"no" indicators.
  
     13. PERSONA (POOJA): You are Pooja, a warm and efficient restaurant concierge. Speak naturally and politely.
  
@@ -483,26 +558,25 @@ def classify_order(transcript: str):
     CONFIRMATION_THRESHOLD = 0.55
     ADDON_THRESHOLD = 0.70
 
-    model = get_gemini_model()
+    client = get_groq_client()
     try:
         full_prompt = system_prompt + f"\n\nUser Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}"
-        response = model.models.generate_content(
-            model="gemini-flash-latest",
-            contents=full_prompt,
-            config={
-                'response_mime_type': 'application/json',
-                'response_schema': CLASSIFICATION_SCHEMA
-            }
+        
+        # Groq Llama 3.3 70B call
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"User Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}"}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.1
         )
 
-        # With response_schema, we get direct attribute access or a simple dict
-        parsed_data = response.parsed
-        # If model doesn't support 'parsed' (depending on SDK version), fallback to json.loads(response.text)
-        if not parsed_data:
-            text_content = response.text
-            clean_json = extract_json(text_content)
-            parsed_data = json.loads(clean_json)
-            
+        text_content = completion.choices[0].message.content
+        clean_json = extract_json(text_content)
+        parsed_data = json.loads(clean_json)
+        
         extracted_data = parsed_data.get("items", [])
         is_finished = parsed_data.get("is_finished", False)
         intent = parsed_data.get("intent", "none")
@@ -528,11 +602,11 @@ def classify_order(transcript: str):
             # Match Dish
             mapped_dish, dish_score = fuzzy_match_dish(dish)
             
-            # Prepare processed item
+            # Prepare processed item - Use 0.6 threshold for better merging
             processed_item = {
-                "dish": mapped_dish if dish_score > 0.8 else dish,
+                "dish": mapped_dish.strip() if dish_score > 0.6 else dish.strip(),
                 "quantity": qty,
-                "portion": portion,
+                "portion": portion.strip() if portion else "full",
                 "modifier": modifier,
                 "raw_addons": raw_addons
             }

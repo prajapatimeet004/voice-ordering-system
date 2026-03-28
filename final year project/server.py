@@ -126,7 +126,38 @@ async def classify(transcript: str = Form(...)):
                 # Proceed to regular classification...
 
         # --- Regular Classification ---
-        result = classify_order(transcript)
+        from classifier_service import detect_intent
+        py_intent, py_confidence = detect_intent(transcript)
+        
+        # If we have a very strong intent for a short transcript, handle it without LLM
+        if py_intent and py_confidence >= 0.9:
+            print(f"DEBUG: Python-based intent detected: {py_intent}")
+            pending = current_order_state.get("pending_confirmation")
+            
+            if py_intent == "affirmative" and pending:
+                sug_dish = pending["suggested"]
+                sug_qty = pending.get("quantity", 1)
+                sug_addons = pending.get("addons", [])
+                if sug_dish in current_order_state["confirmed"]:
+                    current_order_state["confirmed"][sug_dish]["quantity"] += sug_qty
+                    current_order_state["confirmed"][sug_dish]["addons"] = list(set(current_order_state["confirmed"][sug_dish]["addons"] + sug_addons))
+                else:
+                    current_order_state["confirmed"][sug_dish] = {"dish": sug_dish, "quantity": sug_qty, "addons": sug_addons}
+                current_order_state["pending_confirmation"] = None
+                result = {"intent": "affirmative", "response_text": f"Theek hai, adding {sug_qty} {sug_dish} to your order.", "items": [], "is_finished": False}
+            
+            elif py_intent == "negative" and pending:
+                current_order_state["pending_confirmation"] = None
+                result = {"intent": "negative", "response_text": "Theek hai, I won't add that. What else would you like?", "items": [], "is_finished": False}
+            
+            elif py_intent == "finishing":
+                result = {"intent": "finishing", "response_text": response_service.get_final_order_text(current_order_state["confirmed"]), "items": [], "is_finished": True}
+            
+            else:
+                # Fallback to LLM if it's an intent but no context or logic for it
+                result = classify_order(transcript)
+        else:
+            result = classify_order(transcript)
         
         # --- Conversational Logic ---
         intent = result.get("intent")
@@ -134,7 +165,7 @@ async def classify(transcript: str = Form(...)):
         is_finished = result.get("is_finished", False)
         response_text = ""
 
-        if intent == "affirmative" and pending:
+        if intent == "affirmative" and pending and not result.get("response_text"):
             # Confirm the pending suggestion
             sug_dish = pending["suggested"]
             sug_qty = pending.get("quantity", 1)
@@ -176,21 +207,20 @@ async def classify(transcript: str = Form(...)):
                 addons = item.get("raw_addons", [])
                 
                 # Standardize dish name using fuzzy matching against inventory
-                # Use a lower threshold (0.6) for consistent key normalization, but respect LLM's uncertainty
                 matched_dish, score = fuzzy_match_dish(dish_name)
-                final_dish_name = matched_dish if score > 0.7 else dish_name
+                # Be more aggressive with standardization (0.6 threshold instead of 0.7)
+                final_dish_name = matched_dish if score > 0.6 else dish_name.strip()
                 
                 # Check Availability using standardized name
                 is_available, stock = inventory_service.check_availability(final_dish_name, qty)
                 if not is_available:
                     print(f"DEBUG: {final_dish_name} is OUT OF STOCK (Stock: {stock}). Not adding to state.")
-                    # We continue to let the LLM handle the "out of stock" response if it already did
-                    # but we don't add it to the confirmed state.
                     if stock <= 0:
                         continue
                 
-                # State update logic
-                state_key = f"{portion} {final_dish_name}" if portion != "full" else final_dish_name
+                # State update logic - AGGRESSIVE STRIPPING
+                portion = portion.strip() if portion else "full"
+                state_key = f"{portion} {final_dish_name}".strip() if portion != "full" else final_dish_name.strip()
                 
                 if state_key in current_order_state["confirmed"]:
                     if modifier == "increase":
@@ -202,7 +232,11 @@ async def classify(transcript: str = Form(...)):
                         else:
                             current_order_state["confirmed"][state_key]["quantity"] = new_qty
                     else: # "set"
-                        current_order_state["confirmed"][state_key]["quantity"] = qty
+                        if qty <= 0:
+                            if state_key in current_order_state["confirmed"]:
+                                del current_order_state["confirmed"][state_key]
+                        else:
+                            current_order_state["confirmed"][state_key]["quantity"] = qty
                     
                     if state_key in current_order_state["confirmed"]:
                         current_order_state["confirmed"][state_key]["addons"] = list(set(current_order_state["confirmed"][state_key]["addons"] + addons))
