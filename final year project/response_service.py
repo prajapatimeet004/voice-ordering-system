@@ -30,6 +30,13 @@ def get_final_order_text(confirmed_items: Dict) -> str:
     summary = ", ".join(summary_parts)
     return f"Great! Your entire order is {summary}. Is that all, or would you like to add something else?"
 
-def get_correction_feedback_text(modifications: List[str]) -> str:
-    """Generates feedback for corrections (additions/removals)."""
-    return "Got it. I've updated your order accordingly."
+def get_availability_feedback_text(unavailable_items: List[str]) -> str:
+    """Generates feedback for items that are out of stock."""
+    if not unavailable_items:
+        return ""
+    
+    if len(unavailable_items) == 1:
+        return f"Sorry, {unavailable_items[0]} available nathi. Kai biju laavu?"
+    else:
+        items_str = ", ".join(unavailable_items[:-1]) + " ane " + unavailable_items[-1]
+        return f"Sorry, {items_str} available nathi. Kai biju laavu?"

@@ -85,25 +85,69 @@ async def classify(transcript: str = Form(...)):
             current_items = list(current_order_state["confirmed"].keys())
             corrections = process_correction(transcript, current_order_items=current_items)
             
-            # Apply corrections to current_order_state
-            from ordering_workflow import apply_confirmed_corrections
-            new_confirmed, changed = apply_confirmed_corrections(current_order_state["confirmed"].copy(), corrections)
+            # Filter corrections: Separate confident ones from those needing confirmation
+            AUTO_REPLACE_THRESHOLD = 0.85
+            CONFIRMATION_THRESHOLD = 0.55
             
-            if (changed) or (corrections and corrections[0].get("action") == "cancel_all"):
-                # Something was actually changed! Commit it and return.
+            confident_corrections = []
+            to_confirm = []
+            
+            for c in corrections:
+                score = c.get("score", 1.0) # Default to 1.0 if not a matchable action
+                if score >= AUTO_REPLACE_THRESHOLD:
+                    confident_corrections.append(c)
+                elif score >= CONFIRMATION_THRESHOLD:
+                    to_confirm.append(c)
+                    print(f"DEBUG: Correction for '{c.get('original_spoken')}' needs confirmation (Score: {score})")
+                else:
+                    print(f"DEBUG: Correction for '{c.get('original_spoken')}' rejected (Score: {score})")
+
+            # Apply ONLY confident corrections to current_order_state
+            from ordering_workflow import apply_confirmed_corrections
+            new_confirmed, changed, unavailable_items = apply_confirmed_corrections(current_order_state["confirmed"].copy(), confident_corrections)
+            
+            response_text = ""
+            if changed or (confident_corrections and confident_corrections[0].get("action") == "cancel_all"):
                 current_order_state["confirmed"] = new_confirmed
-                
-                # Determine feedback text
                 response_text = "Theek hai, I've updated your order."
-                if corrections:
-                    c = corrections[0]
+                
+                # More specific feedback for single confident correction
+                if len(confident_corrections) == 1:
+                    c = confident_corrections[0]
                     action = c.get("action")
-                    dish = c.get("dish") or c.get("original_dish")
+                    dish = c.get("dish") or c.get("new_dish") or c.get("original_dish")
                     if action == "remove":
                         response_text = f"Theek hai, {dish} remove kar diya hai."
                     elif action == "cancel_all":
                         response_text = "Theek hai, pura order cancel kar diya hai."
+            
+            if unavailable_items:
+                avail_msg = response_service.get_availability_feedback_text(unavailable_items)
+                response_text = f"{response_text} {avail_msg}".strip()
+
+            # Handle items needing confirmation
+            if to_confirm:
+                c = to_confirm[0] # Handle first one for now
+                sug_dish = c.get("dish") or c.get("new_dish") or c.get("original_dish")
+                orig_spoken = c.get("original_spoken")
                 
+                # Store as pending
+                current_order_state["pending_confirmation"] = {
+                    "original": orig_spoken,
+                    "suggested": sug_dish,
+                    "quantity": c.get("quantity", 1),
+                    "addons": c.get("addons", []),
+                    "action": c.get("action"),
+                    "is_correction": True # Mark it as a correction-originated pending
+                }
+                
+                confirm_msg = response_service.get_confirm_text(sug_dish, orig_spoken)
+                if response_text:
+                    response_text += " " + confirm_msg
+                else:
+                    response_text = confirm_msg
+
+            if response_text:
                 # Generate and Play TTS
                 speech_b64 = generate_speech(response_text)
                 if speech_b64:
@@ -114,8 +158,15 @@ async def classify(transcript: str = Form(...)):
                         except: pass
                     asyncio.create_task(asyncio.to_thread(play_async))
                 
+                # Return result for the correction
                 return {
-                    "classification": {"confirmed": {}, "needs_confirmation": [], "not_in_menu": [], "is_finished": False, "intent": "correction"},
+                    "classification": {
+                        "confirmed": confident_corrections, 
+                        "needs_confirmation": to_confirm, 
+                        "not_in_menu": [], 
+                        "is_finished": False, 
+                        "intent": "correction"
+                    },
                     "response_text": response_text,
                     "speech": speech_b64,
                     "current_order": current_order_state["confirmed"],
@@ -167,18 +218,37 @@ async def classify(transcript: str = Form(...)):
 
         if intent == "affirmative" and pending and not result.get("response_text"):
             # Confirm the pending suggestion
-            sug_dish = pending["suggested"]
-            sug_qty = pending.get("quantity", 1)
-            sug_addons = pending.get("addons", [])
-            
-            if sug_dish in current_order_state["confirmed"]:
-                current_order_state["confirmed"][sug_dish]["quantity"] += sug_qty
-                current_order_state["confirmed"][sug_dish]["addons"] = list(set(current_order_state["confirmed"][sug_dish]["addons"] + sug_addons))
+            if pending.get("is_correction"):
+                # Re-apply the correction now that it's confirmed
+                from ordering_workflow import apply_confirmed_corrections
+                # Construct a dummy correction list from the pending state
+                confirmed_corr = [{
+                    "action": pending.get("action"),
+                    "dish": pending.get("suggested"), # Use suggested name
+                    "quantity": pending.get("quantity", 1),
+                    "addons": pending.get("addons", []),
+                    "is_relative": pending.get("is_relative", False)
+                }]
+                new_confirmed, changed, unavailable_items = apply_confirmed_corrections(current_order_state["confirmed"].copy(), confirmed_corr)
+                current_order_state["confirmed"] = new_confirmed
+                response_text = f"Theek hai, {pending.get('suggested')} update kar diya hai."
+                if unavailable_items:
+                    avail_msg = response_service.get_availability_feedback_text(unavailable_items)
+                    response_text += " " + avail_msg
             else:
-                current_order_state["confirmed"][sug_dish] = {"dish": sug_dish, "quantity": sug_qty, "addons": sug_addons}
+                # Regular classification confirmation
+                sug_dish = pending["suggested"]
+                sug_qty = pending.get("quantity", 1)
+                sug_addons = pending.get("addons", [])
+                
+                if sug_dish in current_order_state["confirmed"]:
+                    current_order_state["confirmed"][sug_dish]["quantity"] += sug_qty
+                    current_order_state["confirmed"][sug_dish]["addons"] = list(set(current_order_state["confirmed"][sug_dish]["addons"] + sug_addons))
+                else:
+                    current_order_state["confirmed"][sug_dish] = {"dish": sug_dish, "quantity": sug_qty, "addons": sug_addons}
+                response_text = f"Theek hai, adding {sug_qty} {sug_dish} to your order."
             
             current_order_state["pending_confirmation"] = None
-            response_text = f"Theek hai, adding {sug_qty} {sug_dish} to your order."
             
         elif intent == "negative" and pending:
             current_order_state["pending_confirmation"] = None
@@ -193,6 +263,7 @@ async def classify(transcript: str = Form(...)):
             suggested_dishes = [s.get("suggested", "").lower() for s in result.get("needs_confirmation", [])]
 
             # New items or modifications
+            unavailable_items = []
             for item in result["items"]:
                 dish_name = item["dish"]
                 
@@ -215,6 +286,7 @@ async def classify(transcript: str = Form(...)):
                 is_available, stock = inventory_service.check_availability(final_dish_name, qty)
                 if not is_available:
                     print(f"DEBUG: {final_dish_name} is OUT OF STOCK (Stock: {stock}). Not adding to state.")
+                    unavailable_items.append(final_dish_name)
                     if stock <= 0:
                         continue
                 
@@ -245,6 +317,10 @@ async def classify(transcript: str = Form(...)):
                         current_order_state["confirmed"][state_key] = {"dish": state_key, "quantity": qty, "addons": addons}
             
             response_text = result.get("response_text", "")
+            if unavailable_items:
+                avail_msg = response_service.get_availability_feedback_text(unavailable_items)
+                response_text = f"{response_text}. {avail_msg}" if response_text else avail_msg
+
             if not response_text:
                 confirmed_list = [{"dish": d, "quantity": v["quantity"]} for d, v in current_order_state["confirmed"].items()]
                 response_text = response_service.get_item_confirmed_text(confirmed_list)
@@ -252,12 +328,36 @@ async def classify(transcript: str = Form(...)):
             # Check for concurrent suggestions
             if result.get("needs_confirmation"):
                 sug = result["needs_confirmation"][0]
+                # Extract orphan addons: words in 'original' not in 'suggested'
+                orig_lower = sug.get("original", "").lower()
+                sug_lower = sug.get("suggested", "").lower()
+                # Remove the dish name words from the original to get leftover addon phrase
+                leftover = orig_lower
+                for word in sug_lower.split():
+                    leftover = leftover.replace(word, "", 1)
+                leftover = leftover.strip()
+                # If leftover has meaningful words, store as fallback addon
+                existing_addons = sug.get("addons", [])
+                if leftover and leftover not in ["", sug_lower] and len(leftover.split()) >= 1:
+                    existing_addons = existing_addons + [leftover] if leftover not in existing_addons else existing_addons
+                sug["addons"] = existing_addons
                 current_order_state["pending_confirmation"] = sug
                 response_text += " " + response_service.get_confirm_text(sug["suggested"], sug["original"])
         
         elif result.get("needs_confirmation"):
-            # Just suggestions
+            # Just suggestions (no items were confirmed)
             sug = result["needs_confirmation"][0]
+            # Extract orphan addons: words in 'original' not in 'suggested'
+            orig_lower = sug.get("original", "").lower()
+            sug_lower = sug.get("suggested", "").lower()
+            leftover = orig_lower
+            for word in sug_lower.split():
+                leftover = leftover.replace(word, "", 1)
+            leftover = leftover.strip()
+            existing_addons = sug.get("addons", [])
+            if leftover and leftover not in ["", sug_lower] and len(leftover.split()) >= 1:
+                existing_addons = existing_addons + [leftover] if leftover not in existing_addons else existing_addons
+            sug["addons"] = existing_addons
             current_order_state["pending_confirmation"] = sug
             response_text = response_service.get_confirm_text(sug["suggested"], sug["original"])
         
@@ -267,8 +367,13 @@ async def classify(transcript: str = Form(...)):
         else:
             response_text = "I'm sorry, I didn't quite catch that. Could you repeat?"
 
-        # Override with LLM response if available
-        if result.get("response_text"):
+        # Determine final response text
+        if result.get("needs_confirmation"):
+            sug = result["needs_confirmation"][0]
+            # Prepend LLM response if it exists, otherwise use base response_text
+            base_msg = result.get("response_text", response_text)
+            response_text = base_msg + " " + response_service.get_confirm_text(sug["suggested"], sug["original"])
+        elif result.get("response_text"):
             response_text = result["response_text"]
         
         # Determine language for TTS

@@ -298,6 +298,8 @@ def process_correction(transcript: str, current_order_items=None):
             
             # Match Addons
             # We allow ALL raw_addons directly, no threshold drop.
+            # Preserve original spoken dish for confirmation logic
+            corr["original_spoken"] = dish if action in ["remove", "quantity_change"] else (new if new else dish)
             corr["addons"] = raw_addons
 
             if action == "modify":
@@ -311,6 +313,7 @@ def process_correction(transcript: str, current_order_items=None):
                     matched_new, score_new = fuzzy_match_dish(new)
                     corr["new_dish"] = matched_new if score_new > 0.5 else new
                     corr["new_score"] = round(float(score_new), 2)
+                    corr["score"] = corr["new_score"] # Main score for this correction
             elif action in ["remove", "quantity_change"]:
                 dish = corr.get("dish")
                 if dish:

@@ -252,6 +252,31 @@ def detect_intent(transcript: str):
 
     return None, 0
 
+# Multi-lingual splitting keywords (Item Separators)
+SPLIT_KEYWORDS = [
+    # English
+    "and", "plus", "also", "then", "another",
+    # Hindi
+    "aur", "saath", "phir", "dusra", "aur ek", "iske baad", "uske baad",
+    # Gujarati
+    "ane", "sathe", "jode", "beju", "pachi", "ane biju", "ana pachi", "iske bad", "uske pele"
+]
+
+def split_transcript(transcript: str):
+    """
+    Splits a long transcript into individual item chunks based on keywords.
+    Regex handles word boundaries to avoid splitting mid-word (e.g., 'another' vs 'an').
+    """
+    if not transcript:
+        return []
+    
+    # Create regex pattern for all keywords with word boundaries
+    pattern = r'\b(?:' + '|'.join(map(re.escape, SPLIT_KEYWORDS)) + r')\b'
+    
+    # Split but filter out empty/whitespace strings
+    chunks = re.split(pattern, transcript, flags=re.IGNORECASE)
+    return [c.strip() for c in chunks if c.strip()]
+
 def get_number_from_map(word: str):
     """
     Finds the number from the NUMBER_MAP using EXACT matching only.
@@ -476,150 +501,115 @@ CLASSIFICATION_SCHEMA = {
 
 def classify_order(transcript: str):
     """
-    Classifies a voice order transcript into a structured JSON format 
-    identifying dishes, their quantities, and any addon modifiers (extra spicy, etc.).
+    Classifies a voice order transcript into a structured JSON format.
+    Uses Python-based splitting to process multiple items accurately.
     """
     if not transcript.strip():
         return {}
 
-    # Preprocess transcript to resolve number words
-    preprocessed_text = preprocess_transcript(transcript)
-    print(f"DEBUG: Preprocessed Transcript: {preprocessed_text}")
+    # Split transcript into chunks
+    chunks = split_transcript(transcript)
+    if not chunks:
+        chunks = [transcript] # Fallback if splitting fails or no keywords found
+    
+    print(f"DEBUG: Split into {len(chunks)} chunks: {chunks}")
 
-    # Generate a string description of addons for the LLM
+    final_order_result = {
+        "items": [],
+        "confirmed": {},
+        "needs_confirmation": [],
+        "not_in_menu": [],
+        "is_finished": False,
+        "intent": "none",
+        "response_text": "",
+        "language_code": "hi-IN"
+    }
+
+    # Generate a string description of addons for the LLM context
     addon_context = ""
     for category, details in ADDON_MODIFIERS.items():
         addon_context += f"- {category}: {details['meaning']} (Keywords: {', '.join(details['keywords'][:5])}...)\n"
 
+    # Optimized System Prompt - Focusing on Extraction and Persona
     system_prompt = f"""
-    You are a professional restaurant ordering assistant. 
-    Your task is to take a transcript of a customer's voice order and 
-    extract the dishes, their quantities, or answer questions about menu availability.
-
+    You are Pooja, a warm and efficient restaurant concierge. 
+    Your task is to extract dishes, quantities, and customizations from a customer's voice order.
+    
     AVAILABLE MENU:
     {', '.join(INDIAN_MENU)}
 
-    AVAILABLE ADDON CATEGORIES:
-    {addon_context}
+    CRITICAL EXTRACTION RULES:
+    1. NEVER TRANSLATE: Keep names like "tikhu", "dungli", "vadhare" exactly as spoken.
+    2. RAW CUSTOMIZATION: "biryani ma thodu vadhu tikhu" -> dish: "biryani", raw_addons: ["thodu vadhu tikhu"]. 
+       Extract EVERY customization phrase into the 'raw_addons' list. 
+    3. NAAN/ROTI: Treat as separate items, even if mentioned together with a curry.
+    4. QUANTITY: Always extract as an integer.
+    5. PERSONA: Respond in natural, polite Gujlish (Gujarati-English).
 
-    ITEM SEPARATORS (Words indicating the start of a NEW dish):
-    Gujarati: ane, sathe (if it has quantity), jode, beju, pachi, plus, ane biju
-    Hindi: aur, and, saath (if it has quantity), phir, dusra, plus, aur ek
-    English: and, plus, also, then, with (if it has quantity), another
-
-    ADDON INDICATORS (Words meaning "with" or customization):
-    Gujarati: sathe, jode, sathe aapo, sathe aapjo, sathe mukjo, sathe rakho, sathe aapvu, sathe pan aapo, sathe pan mukjo, sathe add karo, sathe lai aavo, sathe serve karo, sathe muki do, sathe pan aapjo, sathe pan moklo
-    Hindi: ke saath, saath mein, saath, iske saath, iske saath dena, saath mein dena, saath mein laana, saath mein daalna, saath mein bhejna, iske saath bhi, saath mein jodo, saath mein laga do, saath mein rakho, saath mein serve karo
-    English: with, along with, together with, serve with, add with, include with, give with, bring with, send with, pair with, served with, side with, with extra, with side, with topping
-
-    CRITICAL RULES (STRICT ADHERENCE REQUIRED):
-    1. NEVER TRANSLATE ANY WORD INTO ENGLISH. If the user speaks in Gujarati, Hindi, or any other language, you MUST keep the dish name and the raw_addons EXACTLY as they appear in the transcript.
-    2. DO NOT "CORRECT" OR "ALIENATE" THE LANGUAGE. If the user says "tikhu", do not write "spicy". If the user says "dungli", do not write "onion".
-    3. THE ONLY PART THAT SHOULD BE ENGLISH IS THE JSON KEYS ("dish", "quantity", "portion", "modifier", "raw_addons").
-    4. SEPARATE CUSTOMIZATION FROM DISH: The pattern is usually [Dish Name] -> [Add-on/Modifier]. For example, "biryani ma thodu vadhu tikhu rakho", the dish is "biryani" and the addon phrase "thodu vadhu tikhu" goes into "raw_addons".
-    5. MULTIPLE ITEMS: If you see "ITEM SEPARATORS" (like "ane", "aur", "and", "plus"), the words following them are usually a NEW DISH, not an addon. 
-       - ESPECIALLY if the following words contain a QUANTITY (e.g., "10 nan"), it MUST be treated as a separate dish.
-    6. ADDON INDICATORS: If you see any of the "ADDON INDICATORS" (e.g., "sathe", "ke saath", "with"), AND it DOES NOT have a quantity following it, then the phrase following it is an addon.
-    7. DISHES LIKE NAAN/ROTI: "Naan", "Roti", "Papad", "Chai" are almost always SEPARATE DISHES, not addons. Even if someone says "Curry sathe 2 Pan Naan", the "2 Pan Naan" is a separate item.
-    8. CONTEXTUAL MODIFICATIONS MUST MERGE: If a user mentions the same dish multiple times specifically to add a modifier to it (e.g. "masala dosa... masala dosa thoda tikka rakhjo"), DO NOT increase the quantity. Instead, merge the modifier into the initial dish object and keep the quantity as 1.
-    9. PORTIONS & MODIFIERS:
-       - portions: The raw word for portion (e.g., "half", "quarter", "ardhu", "pav").
-       - modifiers: "vadhare" (more/increase), "ochu" (less/decrease), "ek vadhari do" (+1), "ek ochu karo" (-1).
- 
-    13. PERSONA (POOJA): You are Pooja, a warm and efficient restaurant concierge. Speak naturally and politely.
- 
-    14. MULTIPLE ITEMS IN A LIST: Often customers will list items one after another without using separators like "and". 
-        - CRITICAL: A number/quantity followed by a dish name (e.g., "1 samosa 2 tea") is a DEFINITIVE indicator of a new item. 
-        - Ensure EVERY item mentioned is extracted into the "items" list. Do not omit any items.
-
-    15. KITCHEN INVENTORY & MULTI-ITEM AVAILABILITY: 
-        - Use this KITCHEN_INVENTORY to check availability: {json.dumps(inventory_service.load_inventory())}
-        - If Multiple Items Ordered: For EVERY item mentioned, check availability separately.
-        - In "response_text", explicitly tell the user about each item's status.
-          - Example: If ordering Samosa (available) and Pizza (not available): "Haan ji, Samosa available chhe, pan Pizza nathi. Pizza na badle Burger laavu?"
-        - If ALL items available: Confirm the whole set politely.
-        - If some have limited stock: Tell them how much is left for each.
-        - For BILL, PRICE, TIME, or TABLE questions, use this RESTAURANT_INFO: {json.dumps(RESTAURANT_INFO)}
-        - Always respond in a friendly Gujlish (Gujarati-English) voice style.
-        - CRITICAL: Extract EVERY dish mentioned as an order item unless the user explicitly says they DON'T want it.
-        - NEGATIONS & MODIFICATIONS: If a user says "nathi joie", "vagarna", "no [addon]", "badle", "instead of", or any other word expressing a change or removal, include the ENTIRE phrase in "raw_addons". 
-          - Example: "extra butter na rakhvani" -> raw_addons: ["extra butter na rakhvani"].
-          - Example: "spicy badle medium spicy" -> raw_addons: ["spicy badle medium spicy"].
-          - DO NOT set modifier to "increase" if the user is NEGATING the extra (e.g., "no extra butter" should be modifier "set").
-
-    CRITICAL: ALWAYS extract the QUANTITY as a separate integer. NEVER include "10", "one", "ek", etc. in the "dish" string.
-    CRITICAL JSON RULE: Your entire response MUST be a single, valid JSON object. 
-    DO NOT include any commentary, notes, or apologies outside the JSON. 
-    Ensure every key and string is double-quoted. 
-    DO NOT include trailing commas in lists or objects.
+    REQUIRED JSON OUTPUT FORMAT (use EXACTLY these keys):
+    {{
+      "items": [
+        {{"dish": "Samosa", "quantity": 2, "portion": "full", "modifier": "set", "raw_addons": []}},
+        {{"dish": "Chai", "quantity": 1, "portion": "full", "modifier": "set", "raw_addons": ["thodu ochu tikhu"]}}
+      ],
+      "response_text": "Haan ji, 2 Samosa ane 1 Chai. Biju kai?",
+      "is_finished": false,
+      "intent": "none"
+    }}
+    
+    CRITICAL: Your response MUST be a single, valid JSON object using the EXACT keys shown above.
+    NO commentary outside the JSON.
     """
 
-    AUTO_REPLACE_THRESHOLD = 0.85
-    CONFIRMATION_THRESHOLD = 0.55
-    ADDON_THRESHOLD = 0.70
-
     client = get_groq_client()
-    try:
-        full_prompt = system_prompt + f"\n\nUser Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}"
-        
-        # Groq Llama 3.3 70B call
-        completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"User Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}"}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.1
-        )
 
-        text_content = completion.choices[0].message.content
-        clean_json = extract_json(text_content)
-        parsed_data = json.loads(clean_json)
-        
-        extracted_data = parsed_data.get("items", [])
-        is_finished = parsed_data.get("is_finished", False)
-        intent = parsed_data.get("intent", "none")
-        
-        final_order_result = {
-            "items": [], # Preserve the structured items
-            "confirmed": {},
-            "needs_confirmation": [],
-            "not_in_menu": [],
-            "is_finished": is_finished,
-            "intent": intent,
-            "response_text": parsed_data.get("response_text", ""),
-            "language_code": parsed_data.get("language_code", "hi-IN")
-        }
+    for chunk in chunks:
+        preprocessed_text = preprocess_transcript(chunk)
+        try:
+            completion = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"User Order Chunk:\nOriginal: {chunk}\nPreprocessed: {preprocessed_text}"}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.1
+            )
 
-        for item in extracted_data:
-            dish = item.get("dish")
-            qty = item.get("quantity", 1)
-            portion = item.get("portion", "full")
-            modifier = item.get("modifier", "set")
-            raw_addons = item.get("raw_addons", [])
+            text_content = completion.choices[0].message.content
+            print(f"DEBUG LLM Raw: {text_content}")
+            parsed_data = json.loads(extract_json(text_content))
             
-            # Match Dish
-            mapped_dish, dish_score = fuzzy_match_dish(dish)
-            
-            # Prepare processed item - Use 0.6 threshold for better merging
-            processed_item = {
-                "dish": mapped_dish.strip() if dish_score > 0.6 else dish.strip(),
-                "quantity": qty,
-                "portion": portion.strip() if portion else "full",
-                "modifier": modifier,
-                "raw_addons": raw_addons
-            }
-            final_order_result["items"].append(processed_item)
-            
-            # Also keep 'confirmed' for backward compatibility or simple logic
-            final_order_result["confirmed"][processed_item["dish"]] = {
-                "quantity": qty,
-                "addons": raw_addons
-            }
+            # Merge results
+            extracted_items = parsed_data.get("items", [])
+            for item in extracted_items:
+                dish = item.get("dish")
+                qty = item.get("quantity", 1)
+                portion = item.get("portion", "full")
+                modifier = item.get("modifier", "set")
+                raw_addons = item.get("raw_addons", [])
+                
+                mapped_dish, dish_score = fuzzy_match_dish(dish)
+                
+                processed_item = {
+                    "dish": mapped_dish.strip() if dish_score > 0.6 else dish.strip(),
+                    "quantity": qty,
+                    "portion": portion.strip() if portion else "full",
+                    "modifier": modifier,
+                    "raw_addons": raw_addons
+                }
+                final_order_result["items"].append(processed_item)
+                
+                # Update confirmed dict
+                final_order_result["confirmed"][processed_item["dish"]] = {
+                    "quantity": qty,
+                    "addons": raw_addons
+                }
 
-            if dish_score >= CONFIRMATION_THRESHOLD:
-                if dish_score < AUTO_REPLACE_THRESHOLD:
+                # Threshold checks
+                AUTO_REPLACE_THRESHOLD = 0.85
+                CONFIRMATION_THRESHOLD = 0.55
+                if dish_score >= CONFIRMATION_THRESHOLD and dish_score < AUTO_REPLACE_THRESHOLD:
                     final_order_result["needs_confirmation"].append({
                         "original": dish,
                         "suggested": mapped_dish,
@@ -627,19 +617,67 @@ def classify_order(transcript: str):
                         "score": round(dish_score, 2),
                         "addons": raw_addons
                     })
-                    print(f"DEBUG: Needs confirmation '{dish}' -> '{mapped_dish}'? (Score: {dish_score:.2f})")
-                else:
-                    print(f"DEBUG: Auto-matched '{dish}' -> '{mapped_dish}' (Score: {dish_score:.2f}) with Addons: {raw_addons}")
-            
-            else:
-                final_order_result["not_in_menu"].append(dish)
-                print(f"DEBUG: Not in menu: '{dish}' (Score: {dish_score:.2f})")
-            
-        return final_order_result
+                elif dish_score < 0.35:
+                    final_order_result["not_in_menu"].append(dish)
 
-    except Exception as e:
-        print(f"ERROR: Gemini Classification Error: {e}")
-        return {"error": str(e), "confirmed": {}, "needs_confirmation": [], "not_in_menu": []}
+            # Global flags
+            if parsed_data.get("is_finished"):
+                final_order_result["is_finished"] = True
+            if parsed_data.get("intent") != "none":
+                final_order_result["intent"] = parsed_data.get("intent")
+            
+            # Concatenate response text politely
+            chunk_resp = parsed_data.get("response_text", "").strip()
+            if chunk_resp:
+                if final_order_result["response_text"]:
+                    final_order_result["response_text"] += " " + chunk_resp
+                else:
+                    final_order_result["response_text"] = chunk_resp
+            
+            if "language_code" in parsed_data:
+                final_order_result["language_code"] = parsed_data["language_code"]
+
+        except Exception as e:
+            print(f"ERROR processing chunk '{chunk}': {e}")
+            # FALLBACK: Try to extract dish from chunk using fuzzy matching
+            preprocessed = preprocess_transcript(chunk)
+            words = preprocessed.split()
+            # Try to find quantity + dish pattern
+            fallback_qty = 1
+            fallback_dish_text = preprocessed
+            if words and words[0].isdigit():
+                fallback_qty = int(words[0])
+                fallback_dish_text = " ".join(words[1:])
+            
+            if fallback_dish_text.strip():
+                mapped_dish, score = fuzzy_match_dish(fallback_dish_text.strip())
+                if score > 0.5:
+                    print(f"DEBUG FALLBACK: Matched '{fallback_dish_text}' -> '{mapped_dish}' (score: {score:.2f})")
+                    processed_item = {
+                        "dish": mapped_dish.strip(),
+                        "quantity": fallback_qty,
+                        "portion": "full",
+                        "modifier": "set",
+                        "raw_addons": []
+                    }
+                    final_order_result["items"].append(processed_item)
+                    final_order_result["confirmed"][processed_item["dish"]] = {
+                        "quantity": fallback_qty,
+                        "addons": []
+                    }
+                    
+                    if score >= 0.55 and score < 0.85:
+                        final_order_result["needs_confirmation"].append({
+                            "original": fallback_dish_text.strip(),
+                            "suggested": mapped_dish,
+                            "quantity": fallback_qty,
+                            "score": round(score, 2),
+                            "addons": []
+                        })
+                else:
+                    print(f"DEBUG FALLBACK: No match for '{fallback_dish_text}' (score: {score:.2f})")
+
+    return final_order_result
 
 if __name__ == "__main__":
     test_transcripts = [

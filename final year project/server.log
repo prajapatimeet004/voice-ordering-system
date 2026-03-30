@@ -1,0 +1,8 @@
+nohup: ignoring input
+INFO:     Will watch for changes in these directories: ['/home/petpooja-172/Downloads/voicee/voice-ordering-system/final year project']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [84882] using StatReload
+INFO:     Started server process [84890]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:34290 - "GET /favicon.ico HTTP/1.1" 404 Not Found

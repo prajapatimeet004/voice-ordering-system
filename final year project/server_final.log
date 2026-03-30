@@ -1,0 +1,149 @@
+nohup: ignoring input
+INFO:     Will watch for changes in these directories: ['/home/petpooja-172/Downloads/voicee/voice-ordering-system/final year project']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [136644] using StatReload
+INFO:     Started server process [136677]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+2026-03-30 16:23:45.386127: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-03-30 16:23:45.422150: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX_VNNI FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+/home/petpooja-172/.local/lib/python3.10/site-packages/google/api_core/_python_version_support.py:275: FutureWarning: You are using a Python version (3.10.12) which Google will stop supporting in new releases of google.api_core once it reaches its end of life (2026-10-04). Please upgrade to the latest Python version, or at least Python 3.11, to continue receiving updates for google.api_core past that date.
+  warnings.warn(message, FutureWarning)
+2026-03-30 16:23:46.327943: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+DEBUG: Loading Embedding Model for Corrections...
+DEBUG: Max hybrid correction score: 0.6040
+DEBUG: Split into 2 chunks: ['2 samosa', '1 masala dosa']
+ERROR processing chunk '2 samosa': Error code: 429 - {'error': {'message': 'Rate limit reached for model `llama-3.3-70b-versatile` in organization `org_01kmmxsvk8f27aymgdf2ybqtn5` service tier `on_demand` on tokens per day (TPD): Limit 100000, Used 97887, Requested 4686. Please try again in 37m3.072s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+ERROR processing chunk '1 masala dosa': Error code: 429 - {'error': {'message': 'Rate limit reached for model `llama-3.3-70b-versatile` in organization `org_01kmmxsvk8f27aymgdf2ybqtn5` service tier `on_demand` on tokens per day (TPD): Limit 100000, Used 97887, Requested 4690. Please try again in 37m6.528s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+INFO:     127.0.0.1:35566 - "POST /order/classify HTTP/1.1" 200 OK
+WARNING:  StatReload detected changes in 'classifier_service.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [136677]
+INFO:     Started server process [137646]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+2026-03-30 16:24:47.639881: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-03-30 16:24:47.675801: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX_VNNI FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+/home/petpooja-172/.local/lib/python3.10/site-packages/google/api_core/_python_version_support.py:275: FutureWarning: You are using a Python version (3.10.12) which Google will stop supporting in new releases of google.api_core once it reaches its end of life (2026-10-04). Please upgrade to the latest Python version, or at least Python 3.11, to continue receiving updates for google.api_core past that date.
+  warnings.warn(message, FutureWarning)
+2026-03-30 16:24:48.597734: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+DEBUG: Loading Embedding Model for Corrections...
+DEBUG: Max hybrid correction score: 0.6040
+DEBUG: Split into 2 chunks: ['2 samosa', '1 masala dosa']
+INFO:     127.0.0.1:54624 - "POST /order/classify HTTP/1.1" 200 OK
+WARNING:  StatReload detected changes in 'classifier_service.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [137646]
+INFO:     Started server process [137795]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+2026-03-30 16:25:23.331403: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-03-30 16:25:23.366187: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX_VNNI FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+/home/petpooja-172/.local/lib/python3.10/site-packages/google/api_core/_python_version_support.py:275: FutureWarning: You are using a Python version (3.10.12) which Google will stop supporting in new releases of google.api_core once it reaches its end of life (2026-10-04). Please upgrade to the latest Python version, or at least Python 3.11, to continue receiving updates for google.api_core past that date.
+  warnings.warn(message, FutureWarning)
+2026-03-30 16:25:24.274360: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+DEBUG: Loading Embedding Model for Corrections...
+DEBUG: Max hybrid correction score: 0.6040
+DEBUG: Split into 2 chunks: ['2 samosa', '1 masala dosa']
+DEBUG LLM Raw: {
+  "dishes": [
+       {
+           "name": "Samosa",
+           "quantity": 2,
+           "raw_addons": []
+       }
+   ]
+}
+DEBUG LLM Raw: {
+  "dishes": [
+       {
+           "name": "Masala Dosa",
+           "quantity": 1,
+           "raw_addons": []
+       }
+   ]
+}
+INFO:     127.0.0.1:39928 - "POST /order/classify HTTP/1.1" 200 OK
+WARNING:  StatReload detected changes in 'classifier_service.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [137795]
+INFO:     Started server process [138709]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+2026-03-30 16:27:48.838506: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-03-30 16:27:48.874649: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX_VNNI FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+/home/petpooja-172/.local/lib/python3.10/site-packages/google/api_core/_python_version_support.py:275: FutureWarning: You are using a Python version (3.10.12) which Google will stop supporting in new releases of google.api_core once it reaches its end of life (2026-10-04). Please upgrade to the latest Python version, or at least Python 3.11, to continue receiving updates for google.api_core past that date.
+  warnings.warn(message, FutureWarning)
+2026-03-30 16:27:49.772089: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+'(ReadTimeoutError("HTTPSConnectionPool(host='huggingface.co', port=443): Read timed out. (read timeout=10)"), '(Request ID: 93af793f-ffbf-494a-91b2-7de6ec828b00)')' thrown while requesting HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/sentence_bert_config.json
+Retrying in 1s [Retry 1/5].
+'(ReadTimeoutError("HTTPSConnectionPool(host='huggingface.co', port=443): Read timed out. (read timeout=10)"), '(Request ID: 94610701-aa35-4b6d-ad1d-0783ebe5f48e)')' thrown while requesting HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/sentence_bert_config.json
+Retrying in 2s [Retry 2/5].
+DEBUG: Loading Embedding Model for Corrections...
+DEBUG: Max hybrid correction score: 0.6040
+DEBUG: Split into 2 chunks: ['2 samosa', '1 masala dosa']
+DEBUG LLM Raw: {
+  "items": [
+       {
+           "dish": "Samosa",
+           "quantity": 2,
+           "portion": "full",
+           "modifier": "set",
+           "raw_addons": []
+       }
+   ],
+   "response_text": "Haan ji, 2 Samosa. Biju kai?",
+   "is_finished": false,
+   "intent": "none"
+}
+DEBUG: Loading Embedding Model...
+DEBUG: Hybrid Match for 'Samosa': Samosa (Semantic: 1.00, Fuzzy: 1.00, Hybrid: 1.00)
+ERROR processing chunk '1 masala dosa': Error code: 429 - {'error': {'message': 'Rate limit reached for model `llama-3.3-70b-versatile` in organization `org_01kmmxsvk8f27aymgdf2ybqtn5` service tier `on_demand` on tokens per day (TPD): Limit 100000, Used 99966, Requested 559. Please try again in 7m33.6s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+DEBUG: Hybrid Match for 'Samosa': Samosa (Semantic: 1.00, Fuzzy: 1.00, Hybrid: 1.00)
+INFO:     127.0.0.1:60848 - "POST /order/classify HTTP/1.1" 200 OK
+WARNING:  StatReload detected changes in 'classifier_service.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [138709]
+INFO:     Started server process [138912]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+2026-03-30 16:29:48.945488: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-03-30 16:29:48.981278: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX_VNNI FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+/home/petpooja-172/.local/lib/python3.10/site-packages/google/api_core/_python_version_support.py:275: FutureWarning: You are using a Python version (3.10.12) which Google will stop supporting in new releases of google.api_core once it reaches its end of life (2026-10-04). Please upgrade to the latest Python version, or at least Python 3.11, to continue receiving updates for google.api_core past that date.
+  warnings.warn(message, FutureWarning)
+2026-03-30 16:29:49.896876: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+'(ReadTimeoutError("HTTPSConnectionPool(host='huggingface.co', port=443): Read timed out. (read timeout=10)"), '(Request ID: 1449feb8-3baa-41fb-b414-b2864a9e9dd3)')' thrown while requesting HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/config_sentence_transformers.json
+Retrying in 1s [Retry 1/5].
+'(ReadTimeoutError("HTTPSConnectionPool(host='huggingface.co', port=443): Read timed out. (read timeout=10)"), '(Request ID: 72f7e39a-4830-4ec2-86e5-007ecb96b168)')' thrown while requesting HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/config_sentence_transformers.json
+Retrying in 2s [Retry 2/5].
+'(ReadTimeoutError("HTTPSConnectionPool(host='huggingface.co', port=443): Read timed out. (read timeout=10)"), '(Request ID: 74bb1c37-b233-49bf-b0f7-3ae8e901616c)')' thrown while requesting HEAD https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/config_sentence_transformers.json
+Retrying in 1s [Retry 1/5].
+DEBUG: Loading Embedding Model for Corrections...
+DEBUG: Max hybrid correction score: 0.6040
+DEBUG: Split into 2 chunks: ['2 samosa', '1 masala dosa']
+ERROR processing chunk '2 samosa': Error code: 429 - {'error': {'message': 'Rate limit reached for model `llama-3.3-70b-versatile` in organization `org_01kmmxsvk8f27aymgdf2ybqtn5` service tier `on_demand` on tokens per day (TPD): Limit 100000, Used 99844, Requested 614. Please try again in 6m35.712s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+DEBUG: Loading Embedding Model...
+DEBUG: Hybrid Match for 'samosa': Samosa (Semantic: 1.00, Fuzzy: 1.00, Hybrid: 1.00)
+DEBUG FALLBACK: Matched 'samosa' -> 'Samosa' (score: 1.00)
+ERROR processing chunk '1 masala dosa': Error code: 429 - {'error': {'message': 'Rate limit reached for model `llama-3.3-70b-versatile` in organization `org_01kmmxsvk8f27aymgdf2ybqtn5` service tier `on_demand` on tokens per day (TPD): Limit 100000, Used 99827, Requested 595. Please try again in 6m4.608s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+DEBUG: Hybrid Match for 'masala dosa': Masala Dosa (Semantic: 1.00, Fuzzy: 1.00, Hybrid: 1.00)
+DEBUG FALLBACK: Matched 'masala dosa' -> 'Masala Dosa' (score: 1.00)
+DEBUG: Hybrid Match for 'Samosa': Samosa (Semantic: 1.00, Fuzzy: 1.00, Hybrid: 1.00)
+DEBUG: Hybrid Match for 'Masala Dosa': Masala Dosa (Semantic: 1.00, Fuzzy: 1.00, Hybrid: 1.00)
+DEBUG: Masala Dosa is OUT OF STOCK (Stock: 0). Not adding to state.
+INFO:     127.0.0.1:43800 - "POST /order/classify HTTP/1.1" 200 OK
+/usr/lib/python3.10/multiprocessing/resource_tracker.py:224: UserWarning: resource_tracker: There appear to be 5 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '

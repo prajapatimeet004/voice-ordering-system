@@ -1,0 +1,69 @@
+INFO:     Will watch for changes in these directories: ['/home/petpooja-172/Downloads/voicee/voice-ordering-system/final year project']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [131688] using StatReload
+INFO:     Started server process [131714]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+2026-03-30 16:06:25.309176: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-03-30 16:06:25.343176: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX_VNNI FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+/home/petpooja-172/.local/lib/python3.10/site-packages/google/api_core/_python_version_support.py:275: FutureWarning: You are using a Python version (3.10.12) which Google will stop supporting in new releases of google.api_core once it reaches its end of life (2026-10-04). Please upgrade to the latest Python version, or at least Python 3.11, to continue receiving updates for google.api_core past that date.
+  warnings.warn(message, FutureWarning)
+2026-03-30 16:06:26.254388: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+DEBUG: Loading Embedding Model for Corrections...
+DEBUG: Correction detected! (Semantic: 1.0000, Fuzzy: 1.0000, Hybrid: 1.0000)
+ERROR: Groq Correction Processing Error: Error code: 429 - {'error': {'message': 'Rate limit reached for model `llama-3.3-70b-versatile` in organization `org_01kmmxsvk8f27aymgdf2ybqtn5` service tier `on_demand` on tokens per day (TPD): Limit 100000, Used 99090, Requested 1193. Please try again in 4m4.512s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+DEBUG: Correction detected but no valid items affected. Falling back to regular classification.
+DEBUG: Split into 1 chunks: ['Ajwa chawal teekha mat rakhna']
+ERROR processing chunk 'Ajwa chawal teekha mat rakhna': Error code: 429 - {'error': {'message': 'Rate limit reached for model `llama-3.3-70b-versatile` in organization `org_01kmmxsvk8f27aymgdf2ybqtn5` service tier `on_demand` on tokens per day (TPD): Limit 100000, Used 99090, Requested 6237. Please try again in 1h16m42.528s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+INFO:     127.0.0.1:34932 - "POST /order/classify HTTP/1.1" 200 OK
+WARNING:  StatReload detected changes in 'classifier_service.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [131714]
+INFO:     Started server process [135193]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'response_service.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [135193]
+INFO:     Started server process [135227]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [135227]
+INFO:     Started server process [135939]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'ordering_workflow.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [135939]
+INFO:     Started server process [135995]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [135995]
+INFO:     Started server process [136023]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [136023]
+INFO:     Started server process [136055]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+/usr/lib/python3.10/multiprocessing/resource_tracker.py:224: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
