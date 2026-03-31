@@ -68,7 +68,7 @@ CORRECTION_DICT = {
         "cancel karo isko", "ek kam karo", "kam karo", "thoda kam karo", "hata do", 
         "nikaal do", "remove karo", "cancel karo", "ek hata do", "ek kam kar do",
         # Gujarati
-        "cancel karo", "hatao", "nahi joiye", "rehva do", "kadhi nakho",
+        "cancel karo", "hatao", "nahi joiye", "rehva do", "kadhi nakho", "kadhi do", "kadhine",
         "nathi joiye", "remove karo", "aa kadhi lo", "pelu nathi joiye", "aa rehva dyo",
         # English
         "remove", "delete", "dont add", "don't add", "i dont want",
@@ -250,9 +250,19 @@ def process_correction(transcript: str, current_order_items=None):
     7. If the user mentions adding a new item within a correction (e.g., "Ek dal makhani karo"), use action: 'modify', original_dish: '', new_dish: 'dal makhani', quantity: 1, is_relative: false.
     8. ADDON INDICATORS: If you see any of the "with" indicator words listed above (e.g., "sathe", "ke saath", "with"), the phrase following it MUST be extracted into 'raw_addons'. PRESERVE ORIGINAL LANGUAGE.
     9. 'raw_addons': Extract phrases like "extra spicy", "no onion", "thodu vadhu tikhu". Keep original language words. EXACTLY AS SPOKEN.
-    10. CRITICAL: INCLUDE ALL ITEMS. If the customer mentions multiple items (e.g., "Ek burger, ek chai..."), EVERY item must be represented in the "corrections" list. 
+    10. REMOVALS: If the user says "kadhi do", "kadhine", "hatao", "nahi joiye", use action: 'remove'.
+    11. QUANTITY CHANGES: If the user says "X be kari do" (make X two) or "X 2 kar do", use action: 'quantity_change', dish: 'X', quantity: 2, is_relative: false.
+    12. CRITICAL: INCLUDE ALL ITEMS. If the customer mentions multiple items (e.g., "Ek burger, ek chai..."), EVERY item must be represented in the "corrections" list. 
         - For items with no modifications, use action: 'modify', dish: '[item name]', quantity: [qty], raw_addons: [].
-        - NEVER omit an item just because it doesn't have a correction. If it's in the transcript, it MUST be in the JSON.
+        - If one item is removed and another added/modified, they MUST be separate entries in the "corrections" list.
+    
+    EXAMPLES:
+    - "dal makhani kadhi do ane gulab jamun 2 karo" -> 
+      [{{ "action": "remove", "dish": "dal makhani", ... }}, {{ "action": "quantity_change", "dish": "gulab jamun", "quantity": 2, ... }}]
+    - "ek gulab jamun be kari do" ->
+      [{{ "action": "quantity_change", "dish": "gulab jamun", "quantity": 2, "is_relative": false, ... }}]
+    - "daal makhani kadhine ek gulab jamun be kari do" ->
+      [{{ "action": "remove", "dish": "daal makhani", ... }}, {{ "action": "quantity_change", "dish": "gulab jamun", "quantity": 2, ... }}]
     
     10. RULES FOR FIELDS:
         - dish: string (the item being corrected, EXACTLY from transcript)
@@ -298,13 +308,15 @@ def process_correction(transcript: str, current_order_items=None):
             
             # Match Addons
             # We allow ALL raw_addons directly, no threshold drop.
-            # Preserve original spoken dish for confirmation logic
-            corr["original_spoken"] = dish if action in ["remove", "quantity_change"] else (new if new else dish)
+            # Match Addons
             corr["addons"] = raw_addons
 
             if action == "modify":
                 orig = corr.get("original_dish")
                 new = corr.get("new_dish")
+                # Preserve original spoken dish for confirmation logic
+                corr["original_spoken"] = new if new else (orig if orig else "item")
+                
                 if orig:
                     matched_orig, score_orig = fuzzy_match_dish(orig)
                     corr["original_dish"] = matched_orig if score_orig > 0.5 else orig
@@ -316,6 +328,9 @@ def process_correction(transcript: str, current_order_items=None):
                     corr["score"] = corr["new_score"] # Main score for this correction
             elif action in ["remove", "quantity_change"]:
                 dish = corr.get("dish")
+                # Preserve original spoken dish for confirmation logic
+                corr["original_spoken"] = dish if dish else "item"
+                
                 if dish:
                     matched_dish, score = fuzzy_match_dish(dish)
                     corr["dish"] = matched_dish if score > 0.5 else dish

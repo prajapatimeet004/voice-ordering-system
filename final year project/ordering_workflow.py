@@ -174,12 +174,10 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
                         else:
                             if not is_correction_phrase(na): final_addons.append(na)
 
-                    if final_qty <= 0:
-                        del final_confirmed_order[target_dish]
-                        changed = True
-                    else:
-                        val["quantity"] = final_qty
-                        val["addons"] = list(set(final_addons))
+                        # Use intelligent merge
+                        from addon_extractor import extract_addons, merge_structured_addons
+                        new_structured = extract_addons(" ".join(new_addons_list))["addons"]
+                        val["addons"] = merge_structured_addons(current_addons, new_structured)
                         final_confirmed_order[target_dish] = val
                         changed = True
                 else:

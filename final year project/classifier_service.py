@@ -7,6 +7,7 @@ from rapidfuzz import process, fuzz
 load_dotenv(override=True)
 from groq import Groq
 import inventory_service
+from addon_extractor import extract_addons
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY") or os.getenv("GEMINI_API_KEY")
 
@@ -328,93 +329,20 @@ INDIAN_MENU = [
     "Chicken Tikka", "Mutton Rogan Josh", "Fish Curry", "Prawn Curry"
 ]
 
-# CONFIGURATION LOADING
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# Load Addons
-try:
-    with open(os.path.join(_SCRIPT_DIR, "addons.json"), "r", encoding="utf-8") as f:
-        ADDON_MODIFIERS = json.load(f)
-except FileNotFoundError:
-    print("WARNING: addons.json not found. Using empty addon dictionary.")
-    ADDON_MODIFIERS = {}
-
-# Kitchen Inventory is now handled via inventory_service
-# KITCHEN_INVENTORY = inventory_service.load_inventory()
-
-# Restaurant Policy / Meta Info
-RESTAURANT_INFO = {
-    "Preparation Time": "15-20 minutes",
-    "Delivery": "Available within 5km for orders above ₹500",
-    "Table Booking": "Available for groups of 2-10 people",
-    "Payment Options": "UPI, Cash, and Card accepted",
-    "Speciality": "Butter Chicken and Masala Dosa",
-    "Complaints Policy": "If food is cold or service is slow, apologize and offer immediate replacement."
-}
-
-# Pre-calculate flattened addon keywords for simpler matching
-_ALL_ADDON_KEYWORDS = []
-_ADDON_KEYWORD_MAP = {} # Keyword -> Category
-for category, details in ADDON_MODIFIERS.items():
-    for kw in details["keywords"]:
-        _ALL_ADDON_KEYWORDS.append(kw)
-        _ADDON_KEYWORD_MAP[kw] = category
-
 # Global variables for Embeddings (Loaded lazily)
 model = None
 MENU_EMBEDDINGS = None
-ADDON_EMBEDDINGS = None
 
 def get_embedding_model():
-    """Returns the embedding model and pre-calculated menu and addon embeddings."""
-    global model, MENU_EMBEDDINGS, ADDON_EMBEDDINGS
+    """Returns the embedding model and pre-calculated menu embeddings."""
+    global model, MENU_EMBEDDINGS
     if model is None:
         print("DEBUG: Loading Embedding Model...")
         from sentence_transformers import SentenceTransformer
         model = SentenceTransformer('all-MiniLM-L6-v2')
         # Pre-calculate menu embeddings (lowercase for consistency)
         MENU_EMBEDDINGS = model.encode([m.lower() for m in INDIAN_MENU], convert_to_tensor=True)
-        # Pre-calculate addon embeddings
-        ADDON_EMBEDDINGS = model.encode([kw.lower() for kw in _ALL_ADDON_KEYWORDS], convert_to_tensor=True)
-    return model, MENU_EMBEDDINGS, ADDON_EMBEDDINGS
-
-def match_addon_hybrid(text: str):
-    """
-    Matches a piece of text (e.g., surrounding a dish) against ADDON_MODIFIERS
-    using Hybrid Search (60% Semantic / 40% Fuzzy).
-    """
-    if not text or not text.strip():
-        return None, 0.0
-
-    model, _, addon_embs = get_embedding_model()
-    clean_text = re.sub(r'[^a-zA-Z0-9\s]', '', text.lower()).strip()
-    
-    # 1. Semantic Search
-    query_embedding = model.encode(clean_text, convert_to_tensor=True)
-    from sentence_transformers import util
-    import torch
-    cos_scores = util.cos_sim(query_embedding, addon_embs)[0]
-    semantic_score, best_idx = torch.max(cos_scores, dim=0)
-    semantic_score = float(semantic_score)
-    semantic_keyword = _ALL_ADDON_KEYWORDS[best_idx]
-    semantic_category = _ADDON_KEYWORD_MAP[semantic_keyword]
-
-    # 2. Keyword Search (Fuzzy) - Lowercase everything for matching
-    from rapidfuzz import process, fuzz
-    fuzzy_match, fuzzy_score, _ = process.extractOne(clean_text, [kw.lower() for kw in _ALL_ADDON_KEYWORDS], scorer=fuzz.token_set_ratio)
-    fuzzy_score = fuzzy_score / 100.0
-    fuzzy_category = _ADDON_KEYWORD_MAP.get(fuzzy_match, _ADDON_KEYWORD_MAP.get(fuzzy_match.title(), "unknown"))
-
-    # 3. Hybrid Calculation
-    # If they agree on category, simple weighted average
-    if semantic_category == fuzzy_category:
-        hybrid_score = (semantic_score * 0.6) + (fuzzy_score * 0.4)
-        return semantic_category, hybrid_score
-    else:
-        # If they disagree, prefer semantic but check if fuzzy is very strong
-        if fuzzy_score > 0.95:
-            return fuzzy_category, (fuzzy_score * 0.6) + (semantic_score * 0.4)
-        return semantic_category, (semantic_score * 0.6) + (fuzzy_score * 0.4)
+    return model, MENU_EMBEDDINGS
 
 def match_dish_with_embeddings(dish_name: str):
     """
@@ -426,7 +354,7 @@ def match_dish_with_embeddings(dish_name: str):
         return None, 0.0
     
     # Ensure model and embeddings are loaded
-    model, menu_embs, _ = get_embedding_model()
+    model, menu_embs = get_embedding_model()
     
     # Remove noise characters (like ?, !, .) before matching
     clean_name = re.sub(r'[^a-zA-Z0-9\s]', '', dish_name).strip()
@@ -525,11 +453,6 @@ def classify_order(transcript: str):
         "language_code": "hi-IN"
     }
 
-    # Generate a string description of addons for the LLM context
-    addon_context = ""
-    for category, details in ADDON_MODIFIERS.items():
-        addon_context += f"- {category}: {details['meaning']} (Keywords: {', '.join(details['keywords'][:5])}...)\n"
-
     # Optimized System Prompt - Focusing on Extraction and Persona
     system_prompt = f"""
     You are Pooja, a warm and efficient restaurant concierge. 
@@ -591,19 +514,23 @@ def classify_order(transcript: str):
                 
                 mapped_dish, dish_score = fuzzy_match_dish(dish)
                 
+                # Use the new high-performance addon extractor
+                structured_addons = extract_addons(" ".join(raw_addons))["addons"]
+                
                 processed_item = {
                     "dish": mapped_dish.strip() if dish_score > 0.6 else dish.strip(),
                     "quantity": qty,
                     "portion": portion.strip() if portion else "full",
                     "modifier": modifier,
-                    "raw_addons": raw_addons
+                    "raw_addons": raw_addons,
+                    "addons": structured_addons
                 }
                 final_order_result["items"].append(processed_item)
                 
                 # Update confirmed dict
                 final_order_result["confirmed"][processed_item["dish"]] = {
                     "quantity": qty,
-                    "addons": raw_addons
+                    "addons": structured_addons
                 }
 
                 # Threshold checks
@@ -692,3 +619,45 @@ if __name__ == "__main__":
         print(f"\n--- Testing: '{t}' ---")
         result = classify_order(t)
         print(json.dumps(result, indent=4))
+
+def refine_addons_with_llm(dish_name: str, current_addons: list, new_transcript: str) -> list:
+    """
+    Specifically handles modifications/corrections to addons using a targeted LLM prompt.
+    Triggered only when correction keywords are detected for an existing item.
+    """
+    system_prompt = f"""
+    You are an expert restaurant order assistant specializing in precision customizations.
+    Task: Update the current addons for '{dish_name}' based on the user's new request.
+    
+    CURRENT ADDONS for {dish_name}:
+    {', '.join(current_addons) if current_addons else "None"}
+
+    RULES (STRICT):
+    1. REPLACEMENT/SWAP: If you see "instead of X, add Y", "X na badle Y", or "X ni jagyae Y", you MUST REMOVE X from the list and ADD Y. This is a priority rule.
+    2. EXPLICIT REMOVAL: If user says "remove X", "X na rakhta", "X vagar", "don't make X", remove X from the list.
+    3. ADDITION: If user says "extra X", "Y nakho", "make it Y", add Y to the list.
+    4. PRESERVE CATEGORY: Ensure you identify addons correctly regardless of spelling (e.g., 'meethi' and 'mithi' are the same).
+    5. NO DUPLICATES: The final list should have unique addon strings.
+    6. OUTPUT: Return only the updated JSON list.
+
+    OUTPUT FORMAT:
+    {{ "updated_addons": ["addon1", "addon2"] }}
+    """
+    
+    client = get_groq_client()
+    try:
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"New Request for {dish_name}:\n{new_transcript}"}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.0
+        )
+        data = json.loads(extract_json(completion.choices[0].message.content))
+        return data.get("updated_addons", current_addons)
+    except Exception as e:
+        print(f"ERROR in refine_addons_with_llm: {e}")
+        # Fallback to the existing current_addons if LLM fails
+        return current_addons

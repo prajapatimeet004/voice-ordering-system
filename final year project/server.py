@@ -102,6 +102,12 @@ async def classify(transcript: str = Form(...)):
                 else:
                     print(f"DEBUG: Correction for '{c.get('original_spoken')}' rejected (Score: {score})")
 
+            # Process additives/addons for confident corrections
+            from addon_extractor import extract_addons
+            for c in confident_corrections:
+                if c.get("addons"):
+                    c["addons"] = extract_addons(" ".join(c["addons"]))["addons"]
+
             # Apply ONLY confident corrections to current_order_state
             from ordering_workflow import apply_confirmed_corrections
             new_confirmed, changed, unavailable_items = apply_confirmed_corrections(current_order_state["confirmed"].copy(), confident_corrections)
@@ -131,12 +137,16 @@ async def classify(transcript: str = Form(...)):
                 sug_dish = c.get("dish") or c.get("new_dish") or c.get("original_dish")
                 orig_spoken = c.get("original_spoken")
                 
+                # Use structured addon extractor for corrections too
+                from addon_extractor import extract_addons
+                structured_addons = extract_addons(" ".join(c.get("addons", [])))["addons"]
+                
                 # Store as pending
                 current_order_state["pending_confirmation"] = {
                     "original": orig_spoken,
                     "suggested": sug_dish,
                     "quantity": c.get("quantity", 1),
-                    "addons": c.get("addons", []),
+                    "addons": structured_addons,
                     "action": c.get("action"),
                     "is_correction": True # Mark it as a correction-originated pending
                 }
@@ -311,7 +321,29 @@ async def classify(transcript: str = Form(...)):
                             current_order_state["confirmed"][state_key]["quantity"] = qty
                     
                     if state_key in current_order_state["confirmed"]:
-                        current_order_state["confirmed"][state_key]["addons"] = list(set(current_order_state["confirmed"][state_key]["addons"] + addons))
+                        from addon_extractor import extract_addons, merge_structured_addons
+                        from classifier_service import refine_addons_with_llm
+                        # Extract structured intent for the new addons
+                        raw_phrase = " ".join(addons)
+                        new_structured = extract_addons(raw_phrase)["addons"]
+                        
+                        # Decide: Python merge or LLM refinement?
+                        # Trigger LLM only for corrections/swaps as requested by user
+                        has_correction = any(act in ["remove", "swap", "remove_action"] for act in new_structured.values())
+                        
+                        if has_correction:
+                            print(f"DEBUG: Triggering targeted LLM refinement for '{state_key}' addons.")
+                            current_order_state["confirmed"][state_key]["addons"] = refine_addons_with_llm(
+                                state_key, 
+                                current_order_state["confirmed"][state_key]["addons"], 
+                                raw_phrase
+                            )
+                        else:
+                            # Intelligently merge into existing state using Python
+                            current_order_state["confirmed"][state_key]["addons"] = merge_structured_addons(
+                                current_order_state["confirmed"][state_key]["addons"], 
+                                new_structured
+                            )
                 else:
                     if modifier != "decrease":
                         current_order_state["confirmed"][state_key] = {"dish": state_key, "quantity": qty, "addons": addons}
