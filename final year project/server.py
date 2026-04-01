@@ -8,8 +8,9 @@ import tempfile
 import asyncio
 from typing import List, Optional, Dict, Any
 import json
-
-# Import existing services
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import base64
 from audio_utils import safe_remove
 from ordering_workflow import transcribe_audio
 from classifier_service import classify_order, INDIAN_MENU
@@ -17,21 +18,46 @@ from correction_service import detect_correction, process_correction
 from tts_service import generate_speech
 import response_service
 import inventory_service
-try:
-    import winsound
-except ImportError:
-    winsound = None
-import base64
+
+# Use a menu dictionary for prices and categories
+MENU_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "menu.json")
+def load_menu():
+    if os.path.exists(MENU_FILE):
+        with open(MENU_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+MENU_DATA = load_menu()
 
 app = FastAPI(title="Voice Ordering System API")
 
-# Simple global state for the current session's order (for demo purposes)
-# In a real app, this should be per session/table
-current_order_state: Dict[str, Any] = {
-    "confirmed": {},
-    "pending_confirmation": None,
-    "last_response": ""
-}
+# Multi-table state management
+from collections import defaultdict
+
+def create_default_table_state():
+    return {
+        "confirmed": {},
+        "pending_confirmation": None,
+        "last_response": "",
+        "stats": {
+            "active_orders": 0,
+            "revenue": 0.0,
+            "tables_booked": 1
+        }
+    }
+
+# Dictionary to store state for each table_id
+tables_state = defaultdict(create_default_table_state)
+
+def get_table_state(table_id: str = "default"):
+    """Helper to get state for a specific table."""
+    if not table_id:
+        table_id = "default"
+    return tables_state[table_id]
+
+# Keep current_order_state for backward compatibility but point it to a default
+# This will be replaced by per-request lookups
+current_order_state = tables_state["default"]
 
 # Enable CORS for frontend integration
 app.add_middleware(
@@ -41,13 +67,80 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Serve the Dashboard UI
+@app.get("/dashboard")
+@app.get("/admin")
+async def get_dashboard():
+    return FileResponse(os.path.join(os.path.dirname(__file__), "admin.html"))
+
+# Mount the current directory for static assets (CSS, JS)
+app.mount("/static", StaticFiles(directory=os.path.dirname(__file__)), name="static")
+
 @app.get("/")
 async def root():
-    return {"message": "Voice Ordering System API is running"}
+    return FileResponse(os.path.join(os.path.dirname(__file__), "index.html"))
 
 @app.get("/menu")
 async def get_menu():
     return {"menu": sorted(INDIAN_MENU)}
+
+@app.get("/menu/details")
+async def get_menu_details():
+    """Returns the full menu details (prices, categories)."""
+    return MENU_DATA
+
+@app.get("/dashboard/stats")
+async def get_dashboard_stats(table_id: Optional[str] = None):
+    """Calculates and returns dashboard stats. If table_id is provided, returns for that table, else aggregate."""
+    total_revenue = 0.0
+    total_active_items = 0
+    tables_active = 0
+    
+    if table_id:
+        # Single table stats
+        state = get_table_state(table_id)
+        for dish, details in state["confirmed"].items():
+            qty = details.get("quantity", 0)
+            item_info = MENU_DATA.get(dish, {})
+            price = item_info.get("price", 0)
+            total_revenue += price * qty
+            total_active_items += 1
+        tables_active = 1 if total_active_items > 0 else 0
+    else:
+        # Aggregate stats across all tables
+        active_table_ids = [tid for tid, s in tables_state.items() if s["confirmed"]]
+        tables_active = len(active_table_ids)
+        for tid in active_table_ids:
+            state = tables_state[tid]
+            for dish, details in state["confirmed"].items():
+                qty = details.get("quantity", 0)
+                item_info = MENU_DATA.get(dish, {})
+                price = item_info.get("price", 0)
+                total_revenue += price * qty
+                total_active_items += 1
+
+    return {
+        "active_orders": total_active_items,
+        "revenue": round(total_revenue, 2),
+        "tables_booked": tables_active or 1,
+        "avg_order_value": round(total_revenue / total_active_items, 2) if total_active_items > 0 else 0,
+        "total_tables_active": tables_active
+    }
+
+@app.get("/order/state")
+async def get_order_state(table_id: str = "default"):
+    """Returns the current order state for a specific table."""
+    return get_table_state(table_id)
+
+@app.get("/order/all_states")
+async def get_all_order_states():
+    """Returns the order states for all tables."""
+    return tables_state
+
+@app.get("/inventory/status")
+async def get_inventory_status():
+    """Returns the current inventory status."""
+    return inventory_service.get_full_inventory()
 
 @app.post("/order/transcribe")
 async def transcribe(audio: UploadFile = File(...), noise_profile: Optional[UploadFile] = File(None)):
@@ -74,11 +167,12 @@ async def transcribe(audio: UploadFile = File(...), noise_profile: Optional[Uplo
         safe_remove(tmp_audio_path)
 
 @app.post("/order/classify")
-async def classify(transcript: str = Form(...)):
+async def classify(transcript: str = Form(...), table_id: str = Form("default")):
     """
     Classifies a transcript and returns structured order data + TTS response.
     Now handles corrections (like removal) first.
     """
+    current_order_state = get_table_state(table_id)
     try:
         # --- Handle Corrections First ---
         if detect_correction(transcript):
@@ -141,12 +235,13 @@ async def classify(transcript: str = Form(...)):
                 from addon_extractor import extract_addons
                 structured_addons = extract_addons(" ".join(c.get("addons", [])))["addons"]
                 
-                # Store as pending
+                # Store as pending - IMPORTANT: Convert addons to list for frontend
+                from addon_extractor import merge_structured_addons
                 current_order_state["pending_confirmation"] = {
                     "original": orig_spoken,
                     "suggested": sug_dish,
                     "quantity": c.get("quantity", 1),
-                    "addons": structured_addons,
+                    "addons": merge_structured_addons([], structured_addons),
                     "action": c.get("action"),
                     "is_correction": True # Mark it as a correction-originated pending
                 }
@@ -199,12 +294,20 @@ async def classify(transcript: str = Form(...)):
                 sug_dish = pending["suggested"]
                 sug_qty = pending.get("quantity", 1)
                 sug_addons = pending.get("addons", [])
+                current_order_state["pending_confirmation"] = None
+                from addon_extractor import merge_structured_addons
                 if sug_dish in current_order_state["confirmed"]:
                     current_order_state["confirmed"][sug_dish]["quantity"] += sug_qty
-                    current_order_state["confirmed"][sug_dish]["addons"] = list(set(current_order_state["confirmed"][sug_dish]["addons"] + sug_addons))
+                    current_order_state["confirmed"][sug_dish]["addons"] = merge_structured_addons(
+                        current_order_state["confirmed"][sug_dish]["addons"], 
+                        {a: "add" for a in sug_addons} if isinstance(sug_addons, list) else sug_addons
+                    )
                 else:
-                    current_order_state["confirmed"][sug_dish] = {"dish": sug_dish, "quantity": sug_qty, "addons": sug_addons}
-                current_order_state["pending_confirmation"] = None
+                    current_order_state["confirmed"][sug_dish] = {
+                        "dish": sug_dish, 
+                        "quantity": sug_qty, 
+                        "addons": sug_addons if isinstance(sug_addons, list) else merge_structured_addons([], sug_addons)
+                    }
                 result = {"intent": "affirmative", "response_text": f"Theek hai, adding {sug_qty} {sug_dish} to your order.", "items": [], "is_finished": False}
             
             elif py_intent == "negative" and pending:
@@ -253,9 +356,19 @@ async def classify(transcript: str = Form(...)):
                 
                 if sug_dish in current_order_state["confirmed"]:
                     current_order_state["confirmed"][sug_dish]["quantity"] += sug_qty
-                    current_order_state["confirmed"][sug_dish]["addons"] = list(set(current_order_state["confirmed"][sug_dish]["addons"] + sug_addons))
+                    from addon_extractor import merge_structured_addons
+                    # Convert to structured dict if it's a list, then merge
+                    current_order_state["confirmed"][sug_dish]["addons"] = merge_structured_addons(
+                        current_order_state["confirmed"][sug_dish]["addons"], 
+                        {a: "add" for a in sug_addons} if isinstance(sug_addons, list) else sug_addons
+                    )
                 else:
-                    current_order_state["confirmed"][sug_dish] = {"dish": sug_dish, "quantity": sug_qty, "addons": sug_addons}
+                    from addon_extractor import merge_structured_addons
+                    current_order_state["confirmed"][sug_dish] = {
+                        "dish": sug_dish, 
+                        "quantity": sug_qty, 
+                        "addons": sug_addons if isinstance(sug_addons, list) else merge_structured_addons([], sug_addons)
+                    }
                 response_text = f"Theek hai, adding {sug_qty} {sug_dish} to your order."
             
             current_order_state["pending_confirmation"] = None
@@ -284,7 +397,7 @@ async def classify(transcript: str = Form(...)):
 
                 qty = item.get("quantity", 1)
                 portion = item.get("portion", "full")
-                modifier = item.get("modifier", "set")
+                modifier = "increase" if item.get("modifier") == "add" else item.get("modifier", "set")
                 addons = item.get("raw_addons", [])
                 
                 # Standardize dish name using fuzzy matching against inventory
@@ -296,9 +409,9 @@ async def classify(transcript: str = Form(...)):
                 is_available, stock = inventory_service.check_availability(final_dish_name, qty)
                 if not is_available:
                     print(f"DEBUG: {final_dish_name} is OUT OF STOCK (Stock: {stock}). Not adding to state.")
-                    unavailable_items.append(final_dish_name)
-                    if stock <= 0:
-                        continue
+                    # We skip adding to state, but we don't need to append an extra 'sorry' here
+                    # as the LLM (Pooja) now handles this in its response_text.
+                    continue
                 
                 # State update logic - AGGRESSIVE STRIPPING
                 portion = portion.strip() if portion else "full"
@@ -349,10 +462,6 @@ async def classify(transcript: str = Form(...)):
                         current_order_state["confirmed"][state_key] = {"dish": state_key, "quantity": qty, "addons": addons}
             
             response_text = result.get("response_text", "")
-            if unavailable_items:
-                avail_msg = response_service.get_availability_feedback_text(unavailable_items)
-                response_text = f"{response_text}. {avail_msg}" if response_text else avail_msg
-
             if not response_text:
                 confirmed_list = [{"dish": d, "quantity": v["quantity"]} for d, v in current_order_state["confirmed"].items()]
                 response_text = response_service.get_item_confirmed_text(confirmed_list)
@@ -441,10 +550,11 @@ async def classify(transcript: str = Form(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/order/correct")
-async def correct(transcript: str = Form(...)):
+async def correct(transcript: str = Form(...), table_id: str = Form("default")):
     """
     Processes corrections and returns the updated state + TTS response.
     """
+    current_order_state = get_table_state(table_id)
     try:
         current_items = list(current_order_state["confirmed"].keys())
         
@@ -474,17 +584,18 @@ async def correct(transcript: str = Form(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/order/reset")
-async def reset_order():
-    """Resets the current order session."""
-    current_order_state["confirmed"] = {}
-    current_order_state["pending_confirmation"] = None
-    return {"message": "Order reset successfully"}
+async def reset_order(table_id: str = "default"):
+    """Resets the current order session for a specific table."""
+    if table_id in tables_state:
+        del tables_state[table_id]
+    return {"message": f"Order for table {table_id} reset successfully"}
 
 @app.post("/order/submit")
-async def submit_order():
+async def submit_order(table_id: str = "default"):
     """
     Submits the current order, decreases inventory stock, and resets the session.
     """
+    current_order_state = get_table_state(table_id)
     if not current_order_state["confirmed"]:
         raise HTTPException(status_code=400, detail="No items in the order to submit.")
     
@@ -540,5 +651,16 @@ async def toggle_availability(dish_name: str = Form(...), available: bool = Form
 
 if __name__ == "__main__":
     import uvicorn
+    import webbrowser
+    import threading
+    import time
+
+    def open_browser():
+        time.sleep(2)  # Wait for server to start
+        webbrowser.open("http://127.0.0.1:8000/dashboard")
+
+    # Start browser thread
+    threading.Thread(target=open_browser, daemon=True).start()
+
     # Use string import path to enable reload
     uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True, reload_dirs=["."])

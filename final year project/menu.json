@@ -1,0 +1,52 @@
+{
+    "Dal Makhani": {
+        "category": "Main Course",
+        "price": 250,
+        "image": "dal_makhani.png"
+    },
+    "Gulab Jamun": {
+        "category": "Dessert",
+        "price": 80,
+        "image": "gulab_jamun.png"
+    },
+    "Khandvi": {
+        "category": "Snacks",
+        "price": 120,
+        "image": "khandvi.png"
+    },
+    "Misal Pav": {
+        "category": "Snacks",
+        "price": 150,
+        "image": "misal_pav.png"
+    },
+    "Palak Paneer": {
+        "category": "Main Course",
+        "price": 230,
+        "image": "palak_paneer.png"
+    },
+    "Naan": {
+        "category": "Breads",
+        "price": 40,
+        "image": "naan.png"
+    },
+    "Samosa": {
+        "category": "Snacks",
+        "price": 20,
+        "image": "samosa.png"
+    },
+    "Chai": {
+        "category": "Beverages",
+        "price": 20,
+        "image": "chai.png"
+    },
+    "Coffee": {
+        "category": "Beverages",
+        "price": 30,
+        "image": "coffee.png"
+    },
+    "Biryani": {
+        "category": "Main Course",
+        "price": 280,
+        "image": "biryani.png"
+    }
+}

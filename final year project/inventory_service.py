@@ -86,3 +86,24 @@ def toggle_availability(dish_name, status=None):
         inventory[dish_name]["stock"] = new_stock
         return save_inventory(inventory)
     return False
+
+def get_full_inventory():
+    """Returns the entire inventory dictionary."""
+    return load_inventory()
+
+def get_inventory_summary():
+    """
+    Returns a string summary of out-of-stock items and their alternatives.
+    Useful for LLM prompts.
+    """
+    inventory = load_inventory()
+    unavailable = []
+    for dish, data in inventory.items():
+        if data.get("stock", 0) <= 0:
+            alt = data.get("alternative", "None")
+            unavailable.append(f"- {dish} (Alternative: {alt})")
+    
+    if not unavailable:
+        return "All items are currently in stock."
+    
+    return "The following items are OUT OF STOCK. If a customer orders them, apologize in Gujlish and suggest the listed alternative:\n" + "\n".join(unavailable)

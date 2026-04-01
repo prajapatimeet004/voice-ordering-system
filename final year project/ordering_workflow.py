@@ -161,6 +161,7 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
                     val = final_confirmed_order[target_dish]
                     if not isinstance(val, dict): val = {"quantity": val, "addons": []}
                     final_qty = val["quantity"] + qty if is_rel else qty
+                    val["quantity"] = final_qty
                         
                     # Handle addons...
                     new_addons_list = corr.get("addons", [])

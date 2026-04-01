@@ -16,7 +16,7 @@
         "alternative": "Chhole Bhature"
     },
     "Chai": {
-        "stock": 53,
+        "stock": 52,
         "alternative": "Coffee"
     },
     "Pizza": {
@@ -25,5 +25,17 @@
     },
     "Aloo Gobi": {
         "stock": 0
+    },
+    "Vada Pav": {
+        "stock": 18
+    },
+    "Chicken Biryani": {
+        "stock": 19
+    },
+    "Uttapam": {
+        "stock": 19
+    },
+    "Idli": {
+        "stock": 19
     }
 }

@@ -55,7 +55,7 @@ def test_corrections():
 
     for i, tc in enumerate(test_cases):
         print(f"\nTest {i+1}: {tc['description']}")
-        order = apply_confirmed_corrections(order, [tc['correction']])
+        order, changed, unavailable = apply_confirmed_corrections(order, [tc['correction']])
         
         passed = True
         if "expected_qty" in tc:

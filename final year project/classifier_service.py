@@ -9,18 +9,25 @@ from groq import Groq
 import inventory_service
 from addon_extractor import extract_addons
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY") or os.getenv("GEMINI_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY") 
+SARVAM_API_KEY = os.getenv("SARVAM_API_KEY") or "sk_gryfenq9_2CYOHCGaYJFAWf8VYpbPA959"
 
-if not GROQ_API_KEY:
-    raise ValueError("❌ No API key found in .env (expected GROQ_API_KEY)")
+_llm_client = None
 
-_groq_client = None
+def get_llm_client():
+    global _llm_client
+    if _llm_client is None:
+        from openai import OpenAI
+        # Use Sarvam AI as the primary text model
+        _llm_client = OpenAI(
+            base_url="https://api.sarvam.ai/v1",
+            api_key=SARVAM_API_KEY
+        )
+    return _llm_client
 
+# Keep for backward compat
 def get_groq_client():
-    global _groq_client
-    if _groq_client is None:
-        _groq_client = Groq(api_key=GROQ_API_KEY)
-    return _groq_client
+    return get_llm_client()
 
 _gemini_model = None
 
@@ -453,44 +460,58 @@ def classify_order(transcript: str):
         "language_code": "hi-IN"
     }
 
+    # Fetch current inventory status to inform the LLM
+    inventory_summary = inventory_service.get_inventory_summary()
+
     # Optimized System Prompt - Focusing on Extraction and Persona
     system_prompt = f"""
-    You are Pooja, a warm and efficient restaurant concierge. 
+    You are Pooja, a warm and efficient restaurant concierge.
+    You can understand all major Indian languages (including Gujarati, Hindi, Hinglish, Gujlish, and mixed speech) and accurately interpret user intent from informal, spoken, and speech-to-text inputs. 
     Your task is to extract dishes, quantities, and customizations from a customer's voice order.
     
     AVAILABLE MENU:
     {', '.join(INDIAN_MENU)}
 
+    INVENTORY STATUS (CRITICAL):
+    {inventory_summary}
+
     CRITICAL EXTRACTION RULES:
     1. NEVER TRANSLATE: Keep names like "tikhu", "dungli", "vadhare" exactly as spoken.
     2. RAW CUSTOMIZATION: "biryani ma thodu vadhu tikhu" -> dish: "biryani", raw_addons: ["thodu vadhu tikhu"]. 
-       Extract EVERY customization phrase into the 'raw_addons' list. 
-    3. NAAN/ROTI: Treat as separate items, even if mentioned together with a curry.
-    4. QUANTITY: Always extract as an integer.
+    3. QUANTITY MODIFIER: 
+       - Use "increase" for adding to existing count. Set "quantity" to the number being added.
+         Example: "bija be add karo" -> quantity: 2, modifier: "increase".
+       - Use "decrease" for reducing count. Set "quantity" to the number being subtracted.
+         Example: "ek ochhu karo" -> quantity: 1, modifier: "decrease".
+       - Use "set" for absolute totals. Set "quantity" to the final desired number.
+         Example: "be aapo" -> quantity: 2, modifier: "set".
+    4. OUT OF STOCK: If user orders an item listed as OUT OF STOCK, apologize warmly in Gujlish and suggest the Alternative.
     5. PERSONA: Respond in natural, polite Gujlish (Gujarati-English).
-
-    REQUIRED JSON OUTPUT FORMAT (use EXACTLY these keys):
+    
+    REQUIRED JSON OUTPUT FORMAT:
     {{
       "items": [
-        {{"dish": "Samosa", "quantity": 2, "portion": "full", "modifier": "set", "raw_addons": []}},
-        {{"dish": "Chai", "quantity": 1, "portion": "full", "modifier": "set", "raw_addons": ["thodu ochu tikhu"]}}
+        {{
+          "dish": "Samosa", 
+          "quantity": 2, 
+          "portion": "full", 
+          "modifier": "set", // "set", "increase", or "decrease"
+          "raw_addons": []
+        }}
       ],
-      "response_text": "Haan ji, 2 Samosa ane 1 Chai. Biju kai?",
+      "response_text": "Haan ji, 2 Samosa. Biju kai?",
       "is_finished": false,
       "intent": "none"
     }}
-    
-    CRITICAL: Your response MUST be a single, valid JSON object using the EXACT keys shown above.
-    NO commentary outside the JSON.
     """
 
-    client = get_groq_client()
+    client = get_llm_client()
 
     for chunk in chunks:
         preprocessed_text = preprocess_transcript(chunk)
         try:
             completion = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="sarvam-m",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"User Order Chunk:\nOriginal: {chunk}\nPreprocessed: {preprocessed_text}"}
@@ -644,10 +665,10 @@ def refine_addons_with_llm(dish_name: str, current_addons: list, new_transcript:
     {{ "updated_addons": ["addon1", "addon2"] }}
     """
     
-    client = get_groq_client()
+    client = get_llm_client()
     try:
         completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="sarvam-m",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"New Request for {dish_name}:\n{new_transcript}"}

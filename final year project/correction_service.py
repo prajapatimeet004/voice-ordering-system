@@ -7,18 +7,22 @@ from groq import Groq
 import inventory_service
 
 load_dotenv(override=True)
-GROQ_API_KEY = os.getenv("GROQ_API_KEY") or os.getenv("GEMINI_API_KEY")
+SARVAM_API_KEY = os.getenv("SARVAM_API_KEY") or "sk_gryfenq9_2CYOHCGaYJFAWf8VYpbPA959"
 
-if not GROQ_API_KEY:
-    raise ValueError("❌ No API key found in .env (expected GROQ_API_KEY)")
+_llm_client = None
 
-_groq_client = None
+def get_llm_client():
+    global _llm_client
+    if _llm_client is None:
+        from openai import OpenAI
+        _llm_client = OpenAI(
+            base_url="https://api.sarvam.ai/v1",
+            api_key=SARVAM_API_KEY
+        )
+    return _llm_client
 
 def get_groq_client():
-    global _groq_client
-    if _groq_client is None:
-        _groq_client = Groq(api_key=GROQ_API_KEY)
-    return _groq_client
+    return get_llm_client()
 
 _gemini_model = None
 
@@ -278,13 +282,10 @@ def process_correction(transcript: str, current_order_items=None):
     CRITICAL: If a user mentions multiple corrections (e.g., "don't add X, instead add Y"), you MUST provide separate entries or ensure all intents are captured. Every "nahi", "na", or "badle" intent must be reflected.
     """
 
-    client = get_groq_client()
+    client = get_llm_client()
     try:
-        full_prompt = system_prompt + f"\n\nCorrection Transcript: {transcript}"
-        
-        # Groq Llama 3.3 70B call
         completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="sarvam-m",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Correction Transcript: {transcript}"}
