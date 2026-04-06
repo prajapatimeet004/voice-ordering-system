@@ -44,27 +44,33 @@ def get_gemini_model():
 def extract_json(text):
     """
     Robustly extract JSON from text that might contain markdown blocks and <think> tags.
-    Handles common LLM mistakes like trailing commas.
+    Handles common LLM mistakes like trailing commas and unclosed reasoning blocks.
     """
-    # Remove <think> blocks
+    if not text:
+        return ""
+        
+    # 1. Remove <think> blocks
+    # Handle closed tags
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    # Handle unclosed tags (Sarvam-m sometimes cuts off)
+    text = re.sub(r'<think>.*', '', text, flags=re.DOTALL)
     
-    # Try to find JSON block
+    # 2. Try to find JSON block in markdown
     match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
     if match:
         text = match.group(1)
     else:
-        # If no markdown, try to find the first { and last }
-        match = re.search(r'(\{.*\})', text, re.DOTALL)
+        # 3. If no markdown, find the first '{'/'[' and last '}'/']'
+        # Support both JSON objects and arrays
+        match = re.search(r'([\{\[].*[\}\]])', text, re.DOTALL)
         if match:
             text = match.group(1)
         else:
             text = text.strip()
             
     # Clean up common malformed JSON issues
-    # 1. Remove trailing commas before closing braces/brackets
+    # Remove trailing commas before closing braces/brackets
     text = re.sub(r',\s*([\]}])', r'\1', text)
-    # 2. Basic cleanup for any other weirdness
     return text
 
 # Custom Number Map for English, Hindi, and Gujarati
@@ -328,12 +334,15 @@ def preprocess_transcript(transcript: str):
 
 # Comprehensive Indian Menu
 INDIAN_MENU = [
-    "Masala Dosa", "Paneer Tikka", "Butter Chicken", "Chicken Biryani", 
-    "Samosa", "Chhole Bhature", "Dal Makhani", "Palak Paneer", 
-    "Aloo Gobi", "Naan", "Roti", "Chai", "Coffee", "Tea", "Burger", "Pizza",
+    "Masala Dosa", "Plain Dosa", "Mysore Dosa", "Rava Dosa",
+    "Paneer Tikka", "Palak Paneer", "Paneer Pasanda", "Paneer Butter Masala",
+    "Butter Chicken", "Chicken Biryani", "Chicken Tikka", "Chicken Masala",
+    "Samosa", "Chhole Bhature", "Dal Makhani", "Aloo Gobi", "Mix Veg", 
+    "Aloo Bhuri", "Puri Bhaji", "Aloo Paratha",
+    "Naan", "Roti", "Chai", "Coffee", "Tea", "Burger", "Pizza",
     "Gulab Jamun", "Jalebi", "Idli", "Vada", "Uttapam", "Pav Bhaji", "Misal Pav",
     "Dhokla", "Thepla", "Khandvi", "Vada Pav", "Rajma Chawal",
-    "Chicken Tikka", "Mutton Rogan Josh", "Fish Curry", "Prawn Curry"
+    "Mutton Rogan Josh", "Fish Curry", "Prawn Curry"
 ]
 
 # Global variables for Embeddings (Loaded lazily)
@@ -366,41 +375,63 @@ def match_dish_with_embeddings(dish_name: str):
     # Remove noise characters (like ?, !, .) before matching
     clean_name = re.sub(r'[^a-zA-Z0-9\s]', '', dish_name).strip()
     if not clean_name:
-        return None, 0.0
+        return None, 0.0, False
 
-    # 1. Semantic Search (SentenceTransformers)
+    # 1. Semantic Search (Embeddings)
     query_embedding = model.encode(clean_name, convert_to_tensor=True)
     from sentence_transformers import util
     import torch
     cos_scores = util.cos_sim(query_embedding, menu_embs)[0]
-    semantic_score, best_idx = torch.max(cos_scores, dim=0)
-    semantic_score = float(semantic_score)
-    semantic_match = INDIAN_MENU[best_idx]
+    
+    # Get top 2 semantic matches
+    top_v, top_i = torch.topk(cos_scores, k=min(2, len(INDIAN_MENU)))
+    semantic_score = float(top_v[0])
+    semantic_match = INDIAN_MENU[int(top_i[0])]
+    
+    is_semantic_ambiguous = False
+    if len(top_v) > 1:
+        # If second best is within 0.05 of the best
+        if (float(top_v[0]) - float(top_v[1])) < 0.05 and float(top_v[0]) > 0.40:
+            is_semantic_ambiguous = True
 
     # 2. Keyword Search (RapidFuzz) - Case-insensitive
     from rapidfuzz import process, fuzz
-    # Match against lowercase menu
     menu_lower = [m.lower() for m in INDIAN_MENU]
-    fuzzy_match_lower, fuzzy_score, fuzzy_idx = process.extractOne(clean_name.lower(), menu_lower, scorer=fuzz.token_set_ratio)
-    fuzzy_score = fuzzy_score / 100.0 # Normalize to 0.0 - 1.0
-    fuzzy_match = INDIAN_MENU[fuzzy_idx]
+    
+    # Get top 2 fuzzy matches
+    fuzzy_results = process.extract(clean_name.lower(), menu_lower, scorer=fuzz.token_set_ratio, limit=2)
+    
+    fuzzy_match = INDIAN_MENU[fuzzy_results[0][2]]
+    fuzzy_score = fuzzy_results[0][1] / 100.0
+    
+    is_fuzzy_ambiguous = False
+    if len(fuzzy_results) > 1:
+        # If second best is within 5 points of best
+        if (fuzzy_results[0][1] - fuzzy_results[1][1]) < 7 and fuzzy_results[0][1] > 40:
+            is_fuzzy_ambiguous = True
 
     # 3. Hybrid Calculation (60/40)
-    # If the matches differ, we prioritize the semantic match but incorporate fuzzy signals
     if semantic_match == fuzzy_match:
         hybrid_score = (semantic_score * 0.6) + (fuzzy_score * 0.4)
         final_match = semantic_match
     else:
-        # If they disagree, we check if the fuzzy match is exceptionally strong
         if fuzzy_score > 0.95 and semantic_score < 0.7:
             final_match = fuzzy_match
-            hybrid_score = (fuzzy_score * 0.6) + (semantic_score * 0.4) # Shift weight toward certain fuzzy
+            hybrid_score = (fuzzy_score * 0.6) + (semantic_score * 0.4)
         else:
             final_match = semantic_match
             hybrid_score = (semantic_score * 0.6) + (fuzzy_score * 0.4)
 
-    print(f"DEBUG: Hybrid Match for '{dish_name}': {final_match} (Semantic: {semantic_score:.2f}, Fuzzy: {fuzzy_score:.2f}, Hybrid: {hybrid_score:.2f})")
-    return final_match, hybrid_score
+    # 4. Final Ambiguity Check
+    # Force ambiguity if input matches multiple common words
+    is_ambiguous = is_semantic_ambiguous or is_fuzzy_ambiguous
+    
+    # If hybrid matches disagree but both are reasonably strong, it's also ambiguous
+    if semantic_match != fuzzy_match and semantic_score > 0.6 and fuzzy_score > 0.6:
+        is_ambiguous = True
+
+    print(f"DEBUG: Hybrid Match for '{dish_name}': {final_match} (Score: {hybrid_score:.2f}, Ambiguous: {is_ambiguous})")
+    return final_match, hybrid_score, is_ambiguous
 
 def fuzzy_match_dish(dish_name: str):
     """
@@ -486,7 +517,8 @@ def classify_order(transcript: str):
        - Use "set" for absolute totals. Set "quantity" to the final desired number.
          Example: "be aapo" -> quantity: 2, modifier: "set".
     4. OUT OF STOCK: If user orders an item listed as OUT OF STOCK, apologize warmly in Gujlish and suggest the Alternative.
-    5. PERSONA: Respond in natural, polite Gujlish (Gujarati-English).
+    5. AMBIGUITY: If the user is ambiguous (e.g., just says "Dosa", "Paneer", or "Chicken"), provide the **ORIGINAL** word exactly as spoken in the "dish" field. Do NOT auto-correct to a specific dish if it could mean multiple things.
+    6. PERSONA: Respond in natural, polite Gujlish (Gujarati-English).
     
     REQUIRED JSON OUTPUT FORMAT:
     {{
@@ -533,13 +565,13 @@ def classify_order(transcript: str):
                 modifier = item.get("modifier", "set")
                 raw_addons = item.get("raw_addons", [])
                 
-                mapped_dish, dish_score = fuzzy_match_dish(dish)
+                mapped_dish, dish_score, is_ambiguous = fuzzy_match_dish(dish)
                 
                 # Use the new high-performance addon extractor
                 structured_addons = extract_addons(" ".join(raw_addons))["addons"]
                 
                 processed_item = {
-                    "dish": mapped_dish.strip() if dish_score > 0.6 else dish.strip(),
+                    "dish": mapped_dish.strip() if dish_score >= 0.30 else dish.strip(),
                     "quantity": qty,
                     "portion": portion.strip() if portion else "full",
                     "modifier": modifier,
@@ -556,8 +588,8 @@ def classify_order(transcript: str):
 
                 # Threshold checks
                 AUTO_REPLACE_THRESHOLD = 0.85
-                CONFIRMATION_THRESHOLD = 0.55
-                if dish_score >= CONFIRMATION_THRESHOLD and dish_score < AUTO_REPLACE_THRESHOLD:
+                CONFIRMATION_THRESHOLD = 0.30
+                if is_ambiguous or (dish_score >= CONFIRMATION_THRESHOLD and dish_score < AUTO_REPLACE_THRESHOLD):
                     final_order_result["needs_confirmation"].append({
                         "original": dish,
                         "suggested": mapped_dish,
@@ -565,7 +597,7 @@ def classify_order(transcript: str):
                         "score": round(dish_score, 2),
                         "addons": raw_addons
                     })
-                elif dish_score < 0.35:
+                elif dish_score < 0.30:
                     final_order_result["not_in_menu"].append(dish)
 
             # Global flags
@@ -598,29 +630,28 @@ def classify_order(transcript: str):
                 fallback_dish_text = " ".join(words[1:])
             
             if fallback_dish_text.strip():
-                mapped_dish, score = fuzzy_match_dish(fallback_dish_text.strip())
-                if score > 0.5:
-                    print(f"DEBUG FALLBACK: Matched '{fallback_dish_text}' -> '{mapped_dish}' (score: {score:.2f})")
-                    processed_item = {
-                        "dish": mapped_dish.strip(),
+                mapped_dish, score, is_amb_fallback = fuzzy_match_dish(fallback_dish_text)
+                print(f"DEBUG FALLBACK: Matched '{fallback_dish_text}' -> '{mapped_dish}' (score: {score:.2f}, amb: {is_amb_fallback})")
+                processed_item = {
+                    "dish": mapped_dish.strip(),
+                    "quantity": fallback_qty,
+                    "portion": "full",
+                    "modifier": "set",
+                    "raw_addons": []
+                }
+                final_order_result["items"].append(processed_item)
+                final_order_result["confirmed"][processed_item["dish"]] = {
+                    "quantity": fallback_qty,
+                    "addons": []
+                }
+                
+                if is_amb_fallback or (score >= 0.30 and score < 0.85):
+                    final_order_result["needs_confirmation"].append({
+                        "original": fallback_dish_text.strip(),
+                        "suggested": mapped_dish,
                         "quantity": fallback_qty,
-                        "portion": "full",
-                        "modifier": "set",
-                        "raw_addons": []
-                    }
-                    final_order_result["items"].append(processed_item)
-                    final_order_result["confirmed"][processed_item["dish"]] = {
-                        "quantity": fallback_qty,
+                        "score": round(score, 2),
                         "addons": []
-                    }
-                    
-                    if score >= 0.55 and score < 0.85:
-                        final_order_result["needs_confirmation"].append({
-                            "original": fallback_dish_text.strip(),
-                            "suggested": mapped_dish,
-                            "quantity": fallback_qty,
-                            "score": round(score, 2),
-                            "addons": []
                         })
                 else:
                     print(f"DEBUG FALLBACK: No match for '{fallback_dish_text}' (score: {score:.2f})")
@@ -653,13 +684,15 @@ def refine_addons_with_llm(dish_name: str, current_addons: list, new_transcript:
     CURRENT ADDONS for {dish_name}:
     {', '.join(current_addons) if current_addons else "None"}
 
-    RULES (STRICT):
+    CRITICAL: YOU MUST RETURN A JSON OBJECT WITH THE KEY "corrections". THE OUTPUT SHOULD START WITH {{ AND END WITH }}.
+    Example root structure: {{ "corrections": [...] }}
+    
+    10. RULES FOR FIELDS:
     1. REPLACEMENT/SWAP: If you see "instead of X, add Y", "X na badle Y", or "X ni jagyae Y", you MUST REMOVE X from the list and ADD Y. This is a priority rule.
     2. EXPLICIT REMOVAL: If user says "remove X", "X na rakhta", "X vagar", "don't make X", remove X from the list.
     3. ADDITION: If user says "extra X", "Y nakho", "make it Y", add Y to the list.
     4. PRESERVE CATEGORY: Ensure you identify addons correctly regardless of spelling (e.g., 'meethi' and 'mithi' are the same).
     5. NO DUPLICATES: The final list should have unique addon strings.
-    6. OUTPUT: Return only the updated JSON list.
 
     OUTPUT FORMAT:
     {{ "updated_addons": ["addon1", "addon2"] }}

@@ -1,52 +1,130 @@
 {
-    "Dal Makhani": {
+    "Masala Dosa": {
+        "category": "South Indian",
+        "price": 120
+    },
+    "Paneer Tikka": {
+        "category": "Starters",
+        "price": 220
+    },
+    "Butter Chicken": {
         "category": "Main Course",
-        "price": 250,
-        "image": "dal_makhani.png"
+        "price": 320
     },
-    "Gulab Jamun": {
-        "category": "Dessert",
-        "price": 80,
-        "image": "gulab_jamun.png"
-    },
-    "Khandvi": {
-        "category": "Snacks",
-        "price": 120,
-        "image": "khandvi.png"
-    },
-    "Misal Pav": {
-        "category": "Snacks",
-        "price": 150,
-        "image": "misal_pav.png"
-    },
-    "Palak Paneer": {
+    "Chicken Biryani": {
         "category": "Main Course",
-        "price": 230,
-        "image": "palak_paneer.png"
-    },
-    "Naan": {
-        "category": "Breads",
-        "price": 40,
-        "image": "naan.png"
+        "price": 280
     },
     "Samosa": {
         "category": "Snacks",
-        "price": 20,
-        "image": "samosa.png"
+        "price": 20
+    },
+    "Chhole Bhature": {
+        "category": "Main Course",
+        "price": 150
+    },
+    "Dal Makhani": {
+        "category": "Main Course",
+        "price": 250
+    },
+    "Palak Paneer": {
+        "category": "Main Course",
+        "price": 230
+    },
+    "Aloo Gobi": {
+        "category": "Main Course",
+        "price": 180
+    },
+    "Naan": {
+        "category": "Breads",
+        "price": 40
+    },
+    "Roti": {
+        "category": "Breads",
+        "price": 20
     },
     "Chai": {
         "category": "Beverages",
-        "price": 20,
-        "image": "chai.png"
+        "price": 20
     },
     "Coffee": {
         "category": "Beverages",
-        "price": 30,
-        "image": "coffee.png"
+        "price": 30
     },
-    "Biryani": {
+    "Tea": {
+        "category": "Beverages",
+        "price": 20
+    },
+    "Burger": {
+        "category": "Fast Food",
+        "price": 120
+    },
+    "Pizza": {
+        "category": "Fast Food",
+        "price": 200
+    },
+    "Gulab Jamun": {
+        "category": "Dessert",
+        "price": 80
+    },
+    "Jalebi": {
+        "category": "Dessert",
+        "price": 60
+    },
+    "Idli": {
+        "category": "South Indian",
+        "price": 60
+    },
+    "Vada": {
+        "category": "South Indian",
+        "price": 50
+    },
+    "Uttapam": {
+        "category": "South Indian",
+        "price": 100
+    },
+    "Pav Bhaji": {
+        "category": "Snacks",
+        "price": 120
+    },
+    "Misal Pav": {
+        "category": "Snacks",
+        "price": 150
+    },
+    "Dhokla": {
+        "category": "Snacks",
+        "price": 80
+    },
+    "Thepla": {
+        "category": "Snacks",
+        "price": 60
+    },
+    "Khandvi": {
+        "category": "Snacks",
+        "price": 120
+    },
+    "Vada Pav": {
+        "category": "Snacks",
+        "price": 30
+    },
+    "Rajma Chawal": {
         "category": "Main Course",
-        "price": 280,
-        "image": "biryani.png"
+        "price": 180
+    },
+    "Chicken Tikka": {
+        "category": "Starters",
+        "price": 250
+    },
+    "Mutton Rogan Josh": {
+        "category": "Main Course",
+        "price": 380
+    },
+    "Fish Curry": {
+        "category": "Main Course",
+        "price": 300
+    },
+    "Prawn Curry": {
+        "category": "Main Course",
+        "price": 350
     }
 }

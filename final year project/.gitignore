@@ -2,3 +2,11 @@ __pycache__/
 temp_audio/
 *.pyc
 .env
+test_*.py
+verify_*.py
+reproduce_*.py
+debug_*.py
+final_verify_*.py
+*.wav
+*.log
+walkthrough.md

@@ -175,13 +175,13 @@ async def classify(transcript: str = Form(...), table_id: str = Form("default"))
     current_order_state = get_table_state(table_id)
     try:
         # --- Handle Corrections First ---
-        if detect_correction(transcript):
+        if detect_correction(transcript, threshold=0.30):
             current_items = list(current_order_state["confirmed"].keys())
             corrections = process_correction(transcript, current_order_items=current_items)
             
             # Filter corrections: Separate confident ones from those needing confirmation
             AUTO_REPLACE_THRESHOLD = 0.85
-            CONFIRMATION_THRESHOLD = 0.55
+            CONFIRMATION_THRESHOLD = 0.30
             
             confident_corrections = []
             to_confirm = []
@@ -401,9 +401,9 @@ async def classify(transcript: str = Form(...), table_id: str = Form("default"))
                 addons = item.get("raw_addons", [])
                 
                 # Standardize dish name using fuzzy matching against inventory
-                matched_dish, score = fuzzy_match_dish(dish_name)
-                # Be more aggressive with standardization (0.6 threshold instead of 0.7)
-                final_dish_name = matched_dish if score > 0.6 else dish_name.strip()
+                matched_dish, score, is_amb = fuzzy_match_dish(dish_name)
+                # Be more aggressive with standardization (0.30 threshold instead of 0.7)
+                final_dish_name = matched_dish if (score >= 0.30 or is_amb) else dish_name.strip()
                 
                 # Check Availability using standardized name
                 is_available, stock = inventory_service.check_availability(final_dish_name, qty)
@@ -657,6 +657,7 @@ if __name__ == "__main__":
 
     def open_browser():
         time.sleep(2)  # Wait for server to start
+        webbrowser.open("http://127.0.0.1:8000/")
         webbrowser.open("http://127.0.0.1:8000/dashboard")
 
     # Start browser thread

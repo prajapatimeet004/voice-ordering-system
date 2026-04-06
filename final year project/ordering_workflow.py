@@ -86,9 +86,29 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
             
             if orig_dish or new_dish:
                 # 1. Handle removal of original if it exists
+                target_orig = None
                 if orig_dish:
                     mapped_orig, score_orig = fuzzy_match_dish(orig_dish)
-                    target_orig = mapped_orig.strip() if (score_orig > 0.6 and mapped_orig.strip() in final_confirmed_order) else (orig_dish.strip() if orig_dish.strip() in final_confirmed_order else None)
+                    mapped_orig = mapped_orig.strip()
+                    
+                    # Try to find the original in final_confirmed_order (handles "half Masala Dosa")
+                    if mapped_orig in final_confirmed_order:
+                        target_orig = mapped_orig
+                    elif orig_dish in final_confirmed_order:
+                        target_orig = orig_dish
+                    else:
+                        # Search for portioned versions or similar keys
+                        for k in final_confirmed_order.keys():
+                            if k.endswith(f" {mapped_orig}") or k.endswith(f" {orig_dish}"):
+                                target_orig = k
+                                break
+                        
+                        if not target_orig:
+                            # Fuzzy match against keys
+                            match = process.extractOne(mapped_orig, list(final_confirmed_order.keys()), scorer=fuzz.token_set_ratio)
+                            if match and match[1] > 80:
+                                target_orig = match[0]
+
                     if target_orig:
                         del final_confirmed_order[target_orig]
                         changed = True
@@ -96,10 +116,10 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
                 
                 # 2. Handle addition of new dish
                 if new_dish:
-                    mapped_new, score_new = fuzzy_match_dish(new_dish)
+                    mapped_new, score_new, is_amb_new = fuzzy_match_dish(new_dish)
                     mapped_new = mapped_new.strip()
                     
-                    if score_new > 0.6:
+                    if score_new >= 0.30:
                         # Check Availability
                         is_avail, stock = inventory_service.check_availability(mapped_new, qty)
                         if not is_avail:
@@ -150,8 +170,23 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
                 # Modifier-only update
                 dish = corr.get("dish")
                 mapped_dish, score = fuzzy_match_dish(dish)
-                target_dish = mapped_dish if (score > 0.5 and mapped_dish in final_confirmed_order) else (dish if dish in final_confirmed_order else None)
+                mapped_dish = mapped_dish.strip()
                 
+                target_dish = None
+                if mapped_dish in final_confirmed_order:
+                    target_dish = mapped_dish
+                elif dish in final_confirmed_order:
+                    target_dish = dish
+                else:
+                    for k in final_confirmed_order.keys():
+                        if k.endswith(f" {mapped_dish}") or k.endswith(f" {dish}"):
+                            target_dish = k
+                            break
+                    if not target_dish:
+                        match = process.extractOne(mapped_dish, list(final_confirmed_order.keys()), scorer=fuzz.token_set_ratio)
+                        if match and match[1] > 80:
+                            target_dish = match[0]
+
                 if target_dish:
                     # Check Availability if increasing qty
                     if is_rel and qty > 0:
@@ -194,7 +229,23 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
         elif action == "remove":
             dish = corr.get("dish")
             mapped_dish, score = fuzzy_match_dish(dish)
-            target = mapped_dish if (score > 0.5 and mapped_dish in final_confirmed_order) else (dish if dish in final_confirmed_order else None)
+            mapped_dish = mapped_dish.strip()
+            
+            target = None
+            if mapped_dish in final_confirmed_order:
+                target = mapped_dish
+            elif dish in final_confirmed_order:
+                target = dish
+            else:
+                for k in final_confirmed_order.keys():
+                    if k.endswith(f" {mapped_dish}") or k.endswith(f" {dish}"):
+                        target = k
+                        break
+                if not target:
+                    match = process.extractOne(mapped_dish, list(final_confirmed_order.keys()), scorer=fuzz.token_set_ratio)
+                    if match and match[1] > 80:
+                        target = match[0]
+            
             if target:
                 del final_confirmed_order[target]
                 changed = True
@@ -202,7 +253,23 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
         elif action == "quantity_change":
             dish = corr.get("dish")
             mapped_dish, score = fuzzy_match_dish(dish)
-            target = mapped_dish if (score > 0.5 and mapped_dish in final_confirmed_order) else (dish if dish in final_confirmed_order else None)
+            mapped_dish = mapped_dish.strip()
+            
+            target = None
+            if mapped_dish in final_confirmed_order:
+                target = mapped_dish
+            elif dish in final_confirmed_order:
+                target = dish
+            else:
+                for k in final_confirmed_order.keys():
+                    if k.endswith(f" {mapped_dish}") or k.endswith(f" {dish}"):
+                        target = k
+                        break
+                if not target:
+                    match = process.extractOne(mapped_dish, list(final_confirmed_order.keys()), scorer=fuzz.token_set_ratio)
+                    if match and match[1] > 80:
+                        target = match[0]
+
             if target:
                 final_qty = final_confirmed_order[target]["quantity"] + qty if is_rel else qty
                 if is_rel and qty > 0:

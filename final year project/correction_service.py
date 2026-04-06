@@ -39,18 +39,34 @@ def get_gemini_model():
 def extract_json(text):
     """
     Robustly extract JSON from text that might contain markdown blocks and <think> tags.
+    Handles common LLM mistakes like trailing commas and unclosed reasoning blocks.
     """
-    # Remove <think> blocks
+    if not text:
+        return ""
+        
+    # 1. Remove <think> blocks
+    # Handle closed tags
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
-    # Try to find JSON block
+    # Handle unclosed tags (Sarvam-m sometimes cuts off)
+    text = re.sub(r'<think>.*', '', text, flags=re.DOTALL)
+    
+    # 2. Try to find JSON block in markdown
     match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
     if match:
-        return match.group(1)
-    # If no markdown, try to find the first { and last }
-    match = re.search(r'(\{.*\})', text, re.DOTALL)
-    if match:
-        return match.group(1)
-    return text.strip()
+        text = match.group(1)
+    else:
+        # 3. If no markdown, find the first '{'/'[' and last '}'/']'
+        # Support both JSON objects and arrays
+        match = re.search(r'([\{\[].*[\}\]])', text, re.DOTALL)
+        if match:
+            text = match.group(1)
+        else:
+            text = text.strip()
+            
+    # Clean up common malformed JSON issues
+    # Remove trailing commas before closing braces/brackets
+    text = re.sub(r',\s*([\]}])', r'\1', text)
+    return text
 
 CORRECTION_DICT = {
     "modify": [
@@ -58,12 +74,15 @@ CORRECTION_DICT = {
         "nahi", "nahi nahi", "galat", "badal do", "change karo", "uski jagah",
         "replace karo", "dusra wala", "pehle wala nahi", "sahi karo", "sudharo",
         "uski jagah", "uske badle", "badal do", "usko change karo", "jyada", "thoda jyada",
+        "ki jagah", "ke badle", "ke jagah",
         # Gujarati
         "nai", "na na", "khotu", "badlo", "badli do", "eni jagyae", "biju aapo",
         "e nathi", "pela valu nahi", "sachu karo", "sudharjo", "ena badle", "badli do",
+        "ni badle", "na badle", "ne badle", "ni jagyae", "na jagyae",
         # English
         "no no", "not that", "change it", "replace it", "instead", "wrong",
-        "modify", "update it", "i mean", "sorry", "change karo", "rakhna", "rakhjo", "kar dena", "kari dejo"
+        "modify", "update it", "i mean", "sorry", "change karo", "rakhna", "rakhjo", "kar dena", "kari dejo",
+        "instead of"
     ],
     "remove": [
         # Hindi
@@ -142,7 +161,7 @@ def get_embedding_model():
         
     return _embedding_model, _all_correction_phrases, _correction_embeddings
 
-def detect_correction(transcript: str, threshold=0.90):
+def detect_correction(transcript: str, threshold=0.30):
     """
     Checks if the transcript contains any intent similar to correction keywords 
     using a Hybrid approach: 60% Semantic + 40% Fuzzy Keywords.
@@ -257,6 +276,7 @@ def process_correction(transcript: str, current_order_items=None):
     10. REMOVALS: If the user says "kadhi do", "kadhine", "hatao", "nahi joiye", use action: 'remove'.
     11. QUANTITY CHANGES: If the user says "X be kari do" (make X two) or "X 2 kar do", use action: 'quantity_change', dish: 'X', quantity: 2, is_relative: false.
     12. CRITICAL: INCLUDE ALL ITEMS. If the customer mentions multiple items (e.g., "Ek burger, ek chai..."), EVERY item must be represented in the "corrections" list. 
+    13. AMBIGUITY: If the user is ambiguous (e.g., just says "Dosa", "Paneer", or "Chicken"), provide the **ORIGINAL** word exactly as spoken in the "dish" fields. Do NOT auto-correct to a specific dish if it could mean multiple things.
         - For items with no modifications, use action: 'modify', dish: '[item name]', quantity: [qty], raw_addons: [].
         - If one item is removed and another added/modified, they MUST be separate entries in the "corrections" list.
     
@@ -267,6 +287,28 @@ def process_correction(transcript: str, current_order_items=None):
       [{{ "action": "quantity_change", "dish": "gulab jamun", "quantity": 2, "is_relative": false, ... }}]
     - "daal makhani kadhine ek gulab jamun be kari do" ->
       [{{ "action": "remove", "dish": "daal makhani", ... }}, {{ "action": "quantity_change", "dish": "gulab jamun", "quantity": 2, ... }}]
+    
+    REPLACEMENT EXAMPLES ("ni badle" / "ki jagah" / "instead of" patterns):
+    - "Mutton Rogan Josh kari to Paneer Tikka ni badle ne Chicken Tikka ni badle" means:
+      "Add Mutton Rogan Josh INSTEAD OF Paneer Tikka AND INSTEAD OF Chicken Tikka."
+      The user wants to REMOVE Paneer Tikka and Chicken Tikka, and ADD Mutton Rogan Josh.
+      Result: [
+        {{ "action": "modify", "original_dish": "Paneer Tikka", "new_dish": "Mutton Rogan Josh", "dish": "Mutton Rogan Josh", "quantity": 1, "is_relative": false, "raw_addons": [], "correction_found": true }},
+        {{ "action": "remove", "dish": "Chicken Tikka", "quantity": 1, "is_relative": false, "raw_addons": [], "correction_found": true }}
+      ]
+    - "biryani karo samosa ni badle" means: "Add biryani instead of samosa" ->
+      [{{ "action": "modify", "original_dish": "samosa", "new_dish": "biryani", "dish": "biryani", "quantity": 1, "is_relative": false, "raw_addons": [], "correction_found": true }}]
+    - "chai ki jagah coffee de do" means: "Give coffee instead of chai" ->
+      [{{ "action": "modify", "original_dish": "chai", "new_dish": "coffee", "dish": "coffee", "quantity": 1, "is_relative": false, "raw_addons": [], "correction_found": true }}]
+    
+    CRITICAL PATTERN: When you see "X ni badle", "X ki jagah", "X instead of", "X na badle", "X ne badle":
+    - X is the ORIGINAL DISH being REMOVED/REPLACED.
+    - The NEW DISH is mentioned elsewhere in the sentence.
+    - Use action: 'modify' with original_dish = X and new_dish = the replacement.
+    - If multiple "ni badle" phrases appear, the first one becomes a 'modify' (remove old + add new) and subsequent ones become 'remove' actions.
+
+    CRITICAL: YOU MUST RETURN A JSON OBJECT WITH THE KEY "corrections". THE OUTPUT SHOULD START WITH {{ AND END WITH }}.
+    Example root structure: {{ "corrections": [...] }}
     
     10. RULES FOR FIELDS:
         - dish: string (the item being corrected, EXACTLY from transcript)
@@ -319,23 +361,24 @@ def process_correction(transcript: str, current_order_items=None):
                 corr["original_spoken"] = new if new else (orig if orig else "item")
                 
                 if orig:
-                    matched_orig, score_orig = fuzzy_match_dish(orig)
-                    corr["original_dish"] = matched_orig if score_orig > 0.5 else orig
-                    corr["original_score"] = round(float(score_orig), 2)
+                    matched_orig, score_orig, is_amb_orig = fuzzy_match_dish(orig)
+                    corr["original_dish"] = matched_orig if (score_orig >= 0.30 or is_amb_orig) else orig
+                    corr["score_orig"] = score_orig
                 if new:
-                    matched_new, score_new = fuzzy_match_dish(new)
-                    corr["new_dish"] = matched_new if score_new > 0.5 else new
-                    corr["new_score"] = round(float(score_new), 2)
-                    corr["score"] = corr["new_score"] # Main score for this correction
+                    matched_new, score_new, is_amb_new = fuzzy_match_dish(new)
+                    corr["new_dish"] = matched_new if (score_new >= 0.30 or is_amb_new) else new
+                    corr["score"] = score_new
+                    if is_amb_new: corr["score"] = 0.50 # Force confirmation
             elif action in ["remove", "quantity_change"]:
                 dish = corr.get("dish")
                 # Preserve original spoken dish for confirmation logic
                 corr["original_spoken"] = dish if dish else "item"
                 
                 if dish:
-                    matched_dish, score = fuzzy_match_dish(dish)
-                    corr["dish"] = matched_dish if score > 0.5 else dish
-                    corr["score"] = round(float(score), 2)
+                    matched_dish, dish_score, is_ambiguous = fuzzy_match_dish(dish)
+                    corr["dish"] = matched_dish if (dish_score >= 0.30 or is_ambiguous) else dish
+                    corr["score"] = round(float(dish_score), 2)
+                    if is_ambiguous: corr["score"] = 0.50 # Force confirmation
                     
         return corrections
 
