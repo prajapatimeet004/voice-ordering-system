@@ -306,6 +306,7 @@ def process_correction(transcript: str, current_order_items=None):
     - The NEW DISH is mentioned elsewhere in the sentence.
     - Use action: 'modify' with original_dish = X and new_dish = the replacement.
     - If multiple "ni badle" phrases appear, the first one becomes a 'modify' (remove old + add new) and subsequent ones become 'remove' actions.
+    - **NEVER assume a replacement unless the user explicitly uses one of the "instead of" phrases mentioned above.**
 
     CRITICAL: YOU MUST RETURN A JSON OBJECT WITH THE KEY "corrections". THE OUTPUT SHOULD START WITH {{ AND END WITH }}.
     Example root structure: {{ "corrections": [...] }}
@@ -357,18 +358,27 @@ def process_correction(transcript: str, current_order_items=None):
             if action == "modify":
                 orig = corr.get("original_dish")
                 new = corr.get("new_dish")
+                dish = corr.get("dish")
+                
                 # Preserve original spoken dish for confirmation logic
-                corr["original_spoken"] = new if new else (orig if orig else "item")
+                corr["original_spoken"] = new if new else (dish if dish else (orig if orig else "item"))
                 
                 if orig:
                     matched_orig, score_orig, is_amb_orig = fuzzy_match_dish(orig)
                     corr["original_dish"] = matched_orig if (score_orig >= 0.30 or is_amb_orig) else orig
                     corr["score_orig"] = score_orig
-                if new:
-                    matched_new, score_new, is_amb_new = fuzzy_match_dish(new)
-                    corr["new_dish"] = matched_new if (score_new >= 0.30 or is_amb_new) else new
-                    corr["score"] = score_new
-                    if is_amb_new: corr["score"] = 0.50 # Force confirmation
+                
+                # Handle both 'new' (replacement) and 'dish' (modification)
+                target_to_match = new if new else dish
+                if target_to_match:
+                    matched, score, is_amb = fuzzy_match_dish(target_to_match)
+                    if new:
+                        corr["new_dish"] = matched if (score >= 0.30 or is_amb) else new
+                    else:
+                        corr["dish"] = matched if (score >= 0.30 or is_amb) else dish
+                        
+                    corr["score"] = score
+                    if is_amb: corr["score"] = 0.50 # Force confirmation
             elif action in ["remove", "quantity_change"]:
                 dish = corr.get("dish")
                 # Preserve original spoken dish for confirmation logic

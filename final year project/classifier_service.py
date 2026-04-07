@@ -345,6 +345,20 @@ INDIAN_MENU = [
     "Mutton Rogan Josh", "Fish Curry", "Prawn Curry"
 ]
 
+MENU_CATEGORIES = {
+    "Dosas": ["Masala Dosa", "Plain Dosa", "Mysore Dosa", "Rava Dosa", "Uttapam"],
+    "Paneer": ["Paneer Tikka", "Palak Paneer", "Paneer Pasanda", "Paneer Butter Masala"],
+    "Chicken": ["Butter Chicken", "Chicken Biryani", "Chicken Tikka", "Chicken Masala"],
+    "Main Course": ["Dal Makhani", "Chhole Bhature", "Mix Veg", "Aloo Gobi", "Aloo Bhuri", "Rajma Chawal"],
+    "Starters": ["Samosa", "Vada Pav", "Pav Bhaji", "Misal Pav", "Dhokla", "Thepla", "Khandvi"],
+    "South Indian": ["Idli", "Vada", "Uttapam", "Masala Dosa"],
+    "Breads": ["Naan", "Roti", "Aloo Paratha", "Puri Bhaji"],
+    "Beverages": ["Chai", "Coffee", "Tea"],
+    "Desserts": ["Gulab Jamun", "Jalebi"],
+    "Fusion/Global": ["Burger", "Pizza"],
+    "Non-Veg": ["Mutton Rogan Josh", "Fish Curry", "Prawn Curry", "Chicken Biryani", "Chicken Tikka", "Butter Chicken", "Chicken Masala"]
+}
+
 # Global variables for Embeddings (Loaded lazily)
 model = None
 MENU_EMBEDDINGS = None
@@ -465,7 +479,7 @@ CLASSIFICATION_SCHEMA = {
     "required": ["items", "is_finished", "intent", "response_text", "language_code"]
 }
 
-def classify_order(transcript: str):
+def classify_order(transcript: str, current_order_summary: str = "Order is empty"):
     """
     Classifies a voice order transcript into a structured JSON format.
     Uses Python-based splitting to process multiple items accurately.
@@ -494,6 +508,8 @@ def classify_order(transcript: str):
     # Fetch current inventory status to inform the LLM
     inventory_summary = inventory_service.get_inventory_summary()
 
+    categories_summary = "\n".join([f"- {cat}: {', '.join(dishes)}" for cat, dishes in MENU_CATEGORIES.items()])
+
     # Optimized System Prompt - Focusing on Extraction and Persona
     system_prompt = f"""
     You are Pooja, a warm and efficient restaurant concierge.
@@ -503,6 +519,12 @@ def classify_order(transcript: str):
     AVAILABLE MENU:
     {', '.join(INDIAN_MENU)}
 
+    MENU CATEGORIES:
+    {categories_summary}
+
+    CURRENT CUSTOMER ORDER:
+    {current_order_summary}
+
     INVENTORY STATUS (CRITICAL):
     {inventory_summary}
 
@@ -511,27 +533,28 @@ def classify_order(transcript: str):
     2. RAW CUSTOMIZATION: "biryani ma thodu vadhu tikhu" -> dish: "biryani", raw_addons: ["thodu vadhu tikhu"]. 
     3. QUANTITY MODIFIER: 
        - Use "increase" for adding to existing count. Set "quantity" to the number being added.
-         Example: "bija be add karo" -> quantity: 2, modifier: "increase".
        - Use "decrease" for reducing count. Set "quantity" to the number being subtracted.
-         Example: "ek ochhu karo" -> quantity: 1, modifier: "decrease".
        - Use "set" for absolute totals. Set "quantity" to the final desired number.
-         Example: "be aapo" -> quantity: 2, modifier: "set".
     4. OUT OF STOCK: If user orders an item listed as OUT OF STOCK, apologize warmly in Gujlish and suggest the Alternative.
     5. AMBIGUITY: If the user is ambiguous (e.g., just says "Dosa", "Paneer", or "Chicken"), provide the **ORIGINAL** word exactly as spoken in the "dish" field. Do NOT auto-correct to a specific dish if it could mean multiple things.
-    6. PERSONA: Respond in natural, polite Gujlish (Gujarati-English).
+    
+    RECOMMENDATION RULES:
+    1. CONTEXT-AWARE: If the 'CURRENT CUSTOMER ORDER' is NOT empty, recommend something that complements existing items from the 'AVAILABLE MENU'.
+    2. EMPTY ORDER: If the 'CURRENT CUSTOMER ORDER' is empty, do NOT give specific dish recommendations initially. Instead, ask the user which category (e.g., South Indian, Starters, Main Course) they are interested in.
+    3. STRICT MENU: ONLY recommend items that are explicitly listed in the 'AVAILABLE MENU'.
+    4. PERSONA: Respond in natural, polite Gujlish (Gujarati-English). Keep it concise.
+    
+    RECOMMENDATION RULES:
+    1. CONTEXT-AWARE: If the 'CURRENT CUSTOMER ORDER' is NOT empty, recommend something that complements existing items from the 'AVAILABLE MENU'.
+    2. EMPTY ORDER: If the 'CURRENT CUSTOMER ORDER' is empty, do NOT give specific dish recommendations initially. Instead, ask the user which category (e.g., South Indian, Starters, Main Course) they are interested in.
+    3. STRICT MENU: ONLY recommend items that are explicitly listed in the 'AVAILABLE MENU'.
+    4. NO FALSE EXTRACTION: If the user is only asking for recommendations (e.g., "kuch recommend karo", "su saru che"), the "items" list in your JSON MUST BE EMPTY.
+    5. PERSONA: Respond in natural, polite Gujlish (Gujarati-English). Keep it concise.
     
     REQUIRED JSON OUTPUT FORMAT:
     {{
-      "items": [
-        {{
-          "dish": "Samosa", 
-          "quantity": 2, 
-          "portion": "full", 
-          "modifier": "set", // "set", "increase", or "decrease"
-          "raw_addons": []
-        }}
-      ],
-      "response_text": "Haan ji, 2 Samosa. Biju kai?",
+      "items": [], 
+      "response_text": "Hmm, aapne South Indian try karna hai ya Punjabi?",
       "is_finished": false,
       "intent": "none"
     }}
@@ -567,6 +590,12 @@ def classify_order(transcript: str):
                 
                 mapped_dish, dish_score, is_ambiguous = fuzzy_match_dish(dish)
                 
+                # Filter out junk item matches for recommendation phrases
+                # If score is low and it's a long phrase (likely a sentence), it's probably NOT a dish
+                if not is_ambiguous and dish_score < 0.40 and len(dish.split()) > 2:
+                    print(f"DEBUG: Skipping false item extraction for '{dish}' (score: {dish_score})")
+                    continue
+                
                 # Use the new high-performance addon extractor
                 structured_addons = extract_addons(" ".join(raw_addons))["addons"]
                 
@@ -580,23 +609,24 @@ def classify_order(transcript: str):
                 }
                 final_order_result["items"].append(processed_item)
                 
-                # Update confirmed dict
-                final_order_result["confirmed"][processed_item["dish"]] = {
-                    "quantity": qty,
-                    "addons": structured_addons
-                }
-
                 # Threshold checks
                 AUTO_REPLACE_THRESHOLD = 0.85
-                CONFIRMATION_THRESHOLD = 0.30
+                CONFIRMATION_THRESHOLD = 0.55
                 if is_ambiguous or (dish_score >= CONFIRMATION_THRESHOLD and dish_score < AUTO_REPLACE_THRESHOLD):
+                    # Do NOT add to confirmed yet — wait for user confirmation
                     final_order_result["needs_confirmation"].append({
                         "original": dish,
-                        "suggested": mapped_dish,
+                        "suggested": mapped_dish.strip(),
                         "quantity": qty,
                         "score": round(dish_score, 2),
                         "addons": raw_addons
                     })
+                elif dish_score >= AUTO_REPLACE_THRESHOLD:
+                    # Confident match — add to confirmed dict
+                    final_order_result["confirmed"][processed_item["dish"]] = {
+                        "quantity": qty,
+                        "addons": structured_addons
+                    }
                 elif dish_score < 0.30:
                     final_order_result["not_in_menu"].append(dish)
 
@@ -640,19 +670,22 @@ def classify_order(transcript: str):
                     "raw_addons": []
                 }
                 final_order_result["items"].append(processed_item)
-                final_order_result["confirmed"][processed_item["dish"]] = {
-                    "quantity": fallback_qty,
-                    "addons": []
-                }
                 
                 if is_amb_fallback or (score >= 0.30 and score < 0.85):
+                    # Do NOT add to confirmed — wait for user confirmation
                     final_order_result["needs_confirmation"].append({
                         "original": fallback_dish_text.strip(),
-                        "suggested": mapped_dish,
+                        "suggested": mapped_dish.strip(),
                         "quantity": fallback_qty,
                         "score": round(score, 2),
                         "addons": []
                         })
+                elif score >= 0.85:
+                    # Confident match — add to confirmed
+                    final_order_result["confirmed"][processed_item["dish"]] = {
+                        "quantity": fallback_qty,
+                        "addons": []
+                    }
                 else:
                     print(f"DEBUG FALLBACK: No match for '{fallback_dish_text}' (score: {score:.2f})")
 

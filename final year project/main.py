@@ -170,20 +170,20 @@ async def main():
                 new_dish = corr.get("new_dish")
                 
                 # Match original to remove it
-                mapped_orig, score_orig = fuzzy_match_dish(orig_dish)
+                mapped_orig, score_orig, _ = fuzzy_match_dish(orig_dish)
                 if score_orig > 0.5 and mapped_orig in final_confirmed_order:
                     del final_confirmed_order[mapped_orig]
                     print(f"Applied correction: Removed {mapped_orig} (to be replaced)")
                 
                 # Match new to add it
-                mapped_new, score_new = fuzzy_match_dish(new_dish)
+                mapped_new, score_new, _ = fuzzy_match_dish(new_dish)
                 if score_new < 0.5: mapped_new = new_dish
                 final_confirmed_order[mapped_new] = final_confirmed_order.get(mapped_new, 0) + qty
                 print(f"Applied correction: Added {mapped_new} instead.")
 
             elif action == "remove":
                 dish = corr.get("dish")
-                mapped_dish, score = fuzzy_match_dish(dish)
+                mapped_dish, score, _ = fuzzy_match_dish(dish)
                 if score > 0.5 and mapped_dish in final_confirmed_order:
                     del final_confirmed_order[mapped_dish]
                     print(f"Applied correction: Removed {mapped_dish}")
@@ -193,7 +193,7 @@ async def main():
 
             elif action == "quantity_change":
                 dish = corr.get("dish")
-                mapped_dish, score = fuzzy_match_dish(dish)
+                mapped_dish, score, _ = fuzzy_match_dish(dish)
                 if score < 0.5: mapped_dish = dish
                 final_confirmed_order[mapped_dish] = qty
                 print(f"Applied correction: Updated {mapped_dish} to {qty}")

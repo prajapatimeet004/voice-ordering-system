@@ -6,41 +6,74 @@ from transcription_service import transcribe_chunk
 def get_full_transcript(orders, table_id):
     return orders[table_id]["full_transcript"].strip()
 
+async def transcribe_with_context(chunk_path, index, semaphore):
+    """Wrapper to handle parallel transcription with index tracking and isolated state."""
+    async with semaphore:
+        # Each task gets its OWN local state to avoid race conditions on shared lists
+        local_orders = {"temp": {"full_transcript": "", "segments": []}}
+        local_audio_list = []
+        
+        from transcription_service import transcribe_chunk
+        await transcribe_chunk(chunk_path, local_orders, "temp", processed_audio_list=local_audio_list)
+        
+        # Return result tagged with index for ordered merging
+        return {
+            "index": index,
+            "segment": local_orders["temp"]["segments"][0] if local_orders["temp"]["segments"] else None,
+            "audio": local_audio_list[0] if local_audio_list else None,
+            "chunk_path": chunk_path
+        }
+
 async def transcribe_audio(file_path, noise_profile_bytes=None):
-    """Transcribes audio file chunks and returns (transcript, processed_audio_bytes, chunks_data) for THIS file only."""
+    """Transcribes audio file chunks in parallel and returns (transcript, processed_audio_bytes, chunks_data)."""
     if not os.path.exists(file_path):
         return "", None, []
     
     import io
+    import asyncio
     from pydub import AudioSegment
     
-    # Use a dummy orders object to avoid polluting the global state
     temp_orders = {"temp": {"full_transcript": "", "segments": []}}
     processed_audio_chunks = []
     chunks_data = [] # List of {"audio": bytes, "transcript": str}
     
+    # 1. Split audio into chunks
     chunks = split_wav(file_path, chunk_duration=20, noise_profile_bytes=noise_profile_bytes)
-    for chunk in chunks:
-        # Track transcript before this chunk
-        prev_len = len(temp_orders["temp"]["segments"])
-        
-        await transcribe_chunk(chunk, temp_orders, "temp", processed_audio_list=processed_audio_chunks)
-        
-        # Check if a new segment was added
-        if len(temp_orders["temp"]["segments"]) > prev_len:
-            latest_segment = temp_orders["temp"]["segments"][-1]
-            latest_audio = processed_audio_chunks[-1]
-            chunks_data.append({
-                "audio": latest_audio,
-                "transcript": latest_segment["text"].strip()
-            })
+    if not chunks:
+        return "", None, []
+
+    # 2. Process chunks in parallel with a concurrency limit (Semaphore)
+    semaphore = asyncio.Semaphore(3) # Max 3 parallel API calls
+    tasks = [transcribe_with_context(chunk, i, semaphore) for i, chunk in enumerate(chunks)]
+    
+    print(f"DEBUG: Starting parallel transcription for {len(chunks)} chunks (limit: 3)...")
+    results = await asyncio.gather(*tasks)
+    
+    # 3. Sort results by original index to preserve chronological order
+    results.sort(key=lambda x: x["index"])
+    
+    # 4. Merge results back into the final order state and audio lists
+    for res in results:
+        if res["segment"]:
+            txt = res["segment"]["text"].strip()
+            temp_orders["temp"]["segments"].append(res["segment"])
+            temp_orders["temp"]["full_transcript"] += " " + txt
             
-        if os.path.exists(chunk):
-            safe_remove(chunk)
+            if res["audio"]:
+                processed_audio_chunks.append(res["audio"])
+                chunks_data.append({
+                    "audio": res["audio"],
+                    "transcript": txt
+                })
+        
+        # Cleanup original chunk file
+        if os.path.exists(res["chunk_path"]):
+            from audio_utils import safe_remove
+            safe_remove(res["chunk_path"])
     
     transcript = temp_orders["temp"]["full_transcript"].strip()
     
-    # Reconstruct processed audio
+    # Reconstruct processed audio from ordered chunks
     processed_audio_bytes = None
     if processed_audio_chunks:
         combined = AudioSegment.empty()
@@ -88,7 +121,7 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
                 # 1. Handle removal of original if it exists
                 target_orig = None
                 if orig_dish:
-                    mapped_orig, score_orig = fuzzy_match_dish(orig_dish)
+                    mapped_orig, score_orig, _ = fuzzy_match_dish(orig_dish)
                     mapped_orig = mapped_orig.strip()
                     
                     # Try to find the original in final_confirmed_order (handles "half Masala Dosa")
@@ -104,9 +137,9 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
                                 break
                         
                         if not target_orig:
-                            # Fuzzy match against keys
+                            # Fuzzy match against keys (High threshold for removals)
                             match = process.extractOne(mapped_orig, list(final_confirmed_order.keys()), scorer=fuzz.token_set_ratio)
-                            if match and match[1] > 80:
+                            if match and match[1] > 95:
                                 target_orig = match[0]
 
                     if target_orig:
@@ -169,7 +202,7 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
             else:
                 # Modifier-only update
                 dish = corr.get("dish")
-                mapped_dish, score = fuzzy_match_dish(dish)
+                mapped_dish, score, _ = fuzzy_match_dish(dish)
                 mapped_dish = mapped_dish.strip()
                 
                 target_dish = None
@@ -184,7 +217,7 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
                             break
                     if not target_dish:
                         match = process.extractOne(mapped_dish, list(final_confirmed_order.keys()), scorer=fuzz.token_set_ratio)
-                        if match and match[1] > 80:
+                        if match and match[1] > 95:
                             target_dish = match[0]
 
                 if target_dish:
@@ -228,7 +261,7 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
         
         elif action == "remove":
             dish = corr.get("dish")
-            mapped_dish, score = fuzzy_match_dish(dish)
+            mapped_dish, score, _ = fuzzy_match_dish(dish)
             mapped_dish = mapped_dish.strip()
             
             target = None
@@ -243,7 +276,7 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
                         break
                 if not target:
                     match = process.extractOne(mapped_dish, list(final_confirmed_order.keys()), scorer=fuzz.token_set_ratio)
-                    if match and match[1] > 80:
+                    if match and match[1] > 95:
                         target = match[0]
             
             if target:
@@ -252,7 +285,7 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
 
         elif action == "quantity_change":
             dish = corr.get("dish")
-            mapped_dish, score = fuzzy_match_dish(dish)
+            mapped_dish, score, _ = fuzzy_match_dish(dish)
             mapped_dish = mapped_dish.strip()
             
             target = None
@@ -267,7 +300,7 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
                         break
                 if not target:
                     match = process.extractOne(mapped_dish, list(final_confirmed_order.keys()), scorer=fuzz.token_set_ratio)
-                    if match and match[1] > 80:
+                    if match and match[1] > 95:
                         target = match[0]
 
             if target:

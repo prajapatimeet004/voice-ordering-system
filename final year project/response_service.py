@@ -40,3 +40,37 @@ def get_availability_feedback_text(unavailable_items: List[str]) -> str:
     else:
         items_str = ", ".join(unavailable_items[:-1]) + " ane " + unavailable_items[-1]
         return f"Sorry, {items_str} available nathi. Kai biju laavu?"
+
+def get_correction_feedback_text(corrections: List[Dict]) -> str:
+    """Generates specific feedback for applied corrections (removals, mods)."""
+    if not corrections:
+        return "Theek hai, order update kar diya hai."
+    
+    parts = []
+    for c in corrections:
+        action = c.get("action")
+        dish = c.get("dish") or c.get("new_dish") or c.get("original_dish")
+        qty = c.get("quantity", 1)
+        
+        if action == "remove":
+            parts.append(f"{dish} remove kar diya hai")
+        elif action == "cancel_all":
+            return "Theek hai, pura order cancel kar diya hai."
+        elif action == "modify" or action == "quantity_change":
+            if c.get("original_dish") and c.get("new_dish"):
+                parts.append(f"{c['original_dish']} ki jagah {c['new_dish']} add kar diya hai")
+            else:
+                parts.append(f"{dish} update kar diya hai")
+        elif action == "add":
+            parts.append(f"{qty} {dish} add kar diya hai")
+            
+    if not parts:
+        return "Theek hai, order update kar diya hai."
+        
+    feedback = "Theek hai, " + ", ".join(parts[:-1])
+    if len(parts) > 1:
+        feedback += " aur " + parts[-1]
+    else:
+        feedback = "Theek hai, " + parts[0]
+        
+    return feedback + "."
