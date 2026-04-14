@@ -13,15 +13,17 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         :root {
-            --primary: #ff8c00;
-            --primary-gradient: linear-gradient(135deg, #ff8c00, #ff4500);
-            --bg-gradient: linear-gradient(135deg, #fdf2e9 0%, #fdebd0 100%);
-            --glass: rgba(255, 255, 255, 0.85);
-            --glass-border: rgba(255, 255, 255, 0.4);
-            --text-dark: #1a1a1a;
-            --text-muted: #636e72;
-            --card-shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
-            --accent-glow: rgba(255, 140, 0, 0.15);
+            --primary: #6366f1;
+            --primary-gradient: linear-gradient(135deg, #6366f1, #8b5cf6);
+            --secondary: #f59e0b;
+            --bg-deep: #0f172a;
+            --glass: rgba(255, 255, 255, 0.08);
+            --glass-heavy: rgba(255, 255, 255, 0.15);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-light: #f8fafc;
+            --text-muted: #94a3b8;
+            --card-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            --accent-glow: rgba(99, 102, 241, 0.2);
         }
 
         * {
@@ -32,46 +34,51 @@
 
         body {
             font-family: 'Inter', system-ui, sans-serif;
-            background: var(--bg-gradient);
+            background: var(--bg-deep);
+            color: var(--text-light);
             height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
-            color: var(--text-dark);
             overflow: hidden;
             position: relative;
         }
 
-        /* Animated Background Glows */
+        /* Modern Mesh Background */
+        .mesh-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            background-color: #0f172a;
+            background-image:
+                radial-gradient(at 0% 0%, hsla(253, 16%, 7%, 1) 0, transparent 50%),
+                radial-gradient(at 50% 0%, hsla(225, 39%, 30%, 1) 0, transparent 50%),
+                radial-gradient(at 100% 0%, hsla(339, 49%, 30%, 1) 0, transparent 50%);
+            filter: blur(100px);
+            opacity: 0.6;
+        }
+
         .bg-glow {
             position: absolute;
-            width: 600px;
-            height: 600px;
-            background: radial-gradient(circle, var(--accent-glow) 0%, rgba(255, 255, 255, 0) 70%);
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle, var(--accent-glow) 0%, rgba(99, 102, 241, 0) 70%);
             border-radius: 50%;
             z-index: -1;
-            filter: blur(80px);
-            animation: float 20s infinite alternate cubic-bezier(0.45, 0, 0.55, 1);
-        }
-
-        .bg-glow-1 {
-            top: -10%;
-            left: -10%;
-        }
-
-        .bg-glow-2 {
-            bottom: -10%;
-            right: -10%;
-            animation-delay: -5s;
+            filter: blur(60px);
+            animation: float 25s infinite alternate ease-in-out;
         }
 
         @keyframes float {
             0% {
-                transform: translate(0, 0) scale(1);
+                transform: translate(-10%, -10%) scale(1);
             }
 
             100% {
-                transform: translate(100px, 50px) scale(1.1);
+                transform: translate(10%, 10%) scale(1.2);
             }
         }
 
@@ -80,33 +87,27 @@
             max-width: 600px;
             padding: 2rem;
             text-align: center;
+            z-index: 10;
         }
 
         /* Table Selection Screen */
-        #table-screen {
-            display: flex;
-            flex-direction: column;
-            gap: 2rem;
-        }
-
         .logo-large {
             font-family: 'Outfit', sans-serif;
-            font-size: 4rem;
+            font-size: 5rem;
             font-weight: 900;
-            background: var(--primary-gradient);
+            background: linear-gradient(to bottom right, #fff, #94a3b8);
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
             margin-bottom: 0.5rem;
-            letter-spacing: -2px;
-            animation: slideDown 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+            letter-spacing: -3px;
         }
 
         .subtitle {
-            font-size: 1.2rem;
+            font-size: 1.1rem;
             color: var(--text-muted);
-            margin-bottom: 2rem;
-            font-weight: 500;
+            margin-bottom: 3rem;
+            letter-spacing: 1px;
         }
 
         .table-grid {
@@ -118,54 +119,39 @@
         .table-card {
             background: var(--glass);
             padding: 2.5rem;
-            border-radius: 35px;
+            border-radius: 30px;
             border: 1px solid var(--glass-border);
             box-shadow: var(--card-shadow);
             cursor: pointer;
-            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1);
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 1rem;
-            animation: cardReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
-            backdrop-filter: blur(12px);
-        }
-
-        .table-card:nth-child(1) {
-            animation-delay: 0.1s;
-        }
-
-        .table-card:nth-child(2) {
-            animation-delay: 0.2s;
-        }
-
-        .table-card:nth-child(3) {
-            animation-delay: 0.3s;
-        }
-
-        .table-card:nth-child(4) {
-            animation-delay: 0.4s;
+            backdrop-filter: blur(20px);
         }
 
         .table-card:hover {
-            transform: scale(1.08) translateY(-10px);
-            border-color: var(--primary);
-            background: #fff;
-            box-shadow: 0 30px 70px rgba(255, 140, 0, 0.15);
+            background: var(--glass-heavy);
+            transform: translateY(-10px) scale(1.02);
+            border-color: rgba(255, 255, 255, 0.3);
+            box-shadow: 0 40px 80px rgba(0, 0, 0, 0.4);
         }
 
         .table-card i {
             color: var(--primary);
-            width: 40px;
-            height: 40px;
+            width: 48px;
+            height: 48px;
+            filter: drop-shadow(0 0 10px var(--accent-glow));
         }
 
         .table-card b {
             font-size: 1.4rem;
-            font-weight: 800;
+            font-weight: 700;
+            color: #fff;
         }
 
-        /* ===================== ORDER SCREEN - SPLIT LAYOUT ===================== */
+        /* ===================== ORDER SCREEN ===================== */
         #order-screen {
             display: none;
             position: fixed;
@@ -174,7 +160,7 @@
             right: 0;
             bottom: 0;
             z-index: 100;
-            background: var(--bg-gradient);
+            background: #020617;
         }
 
         .order-layout {
@@ -183,333 +169,211 @@
             width: 100%;
         }
 
-        /* LEFT PANEL - Menu */
         .menu-panel {
-            width: 45%;
-            height: 100vh;
-            background: rgba(255, 255, 255, 0.6);
-            backdrop-filter: blur(16px);
+            width: 400px;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(40px);
             border-right: 1px solid var(--glass-border);
             display: flex;
             flex-direction: column;
-            overflow: hidden;
         }
 
         .menu-panel-header {
-            padding: 1.2rem 1.5rem;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            padding: 2rem;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            flex-shrink: 0;
+            gap: 1rem;
         }
 
         .menu-panel-header h2 {
             font-family: 'Outfit', sans-serif;
-            font-size: 1.3rem;
+            font-size: 1.8rem;
             font-weight: 800;
-            color: var(--text-dark);
+            color: #fff;
         }
 
         .menu-scroll-area {
             flex: 1;
+            padding: 0 2rem 2rem;
             overflow-y: auto;
-            padding: 1rem 1.2rem;
-            scrollbar-width: thin;
-            scrollbar-color: var(--primary) transparent;
-        }
-
-        .menu-scroll-area::-webkit-scrollbar {
-            width: 5px;
-        }
-
-        .menu-scroll-area::-webkit-scrollbar-thumb {
-            background: var(--primary);
-            border-radius: 10px;
-        }
-
-        .menu-category {
-            margin-bottom: 1rem;
         }
 
         .category-header {
-            font-family: 'Outfit', sans-serif;
-            font-weight: 700;
             color: var(--primary);
-            margin-bottom: 0.4rem;
-            display: flex;
-            align-items: center;
-            gap: 0.3rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
             font-size: 0.75rem;
-        }
-
-        .menu-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 0.5rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin: 2rem 0 1rem;
         }
 
         .menu-item-card {
             background: var(--glass);
             border: 1px solid var(--glass-border);
-            border-radius: 14px;
-            padding: 0.6rem 0.8rem;
-            text-align: left;
-            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-            cursor: default;
+            padding: 1rem;
+            border-radius: 16px;
+            margin-bottom: 0.75rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: 0.3s;
         }
 
         .menu-item-card:hover {
-            transform: translateY(-2px);
             border-color: var(--primary);
-            box-shadow: 0 8px 20px rgba(255, 140, 0, 0.1);
+            background: var(--glass-heavy);
         }
 
-        .menu-item-name {
+        .item-name {
             font-weight: 600;
-            font-size: 0.8rem;
-            color: var(--text-dark);
-            margin-bottom: 0.15rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            color: #fff;
         }
 
-        .menu-item-price {
-            font-family: 'Outfit', sans-serif;
+        .item-price {
             font-weight: 800;
-            font-size: 0.9rem;
-            background: var(--primary-gradient);
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: var(--secondary);
         }
 
-        /* RIGHT PANEL - Voice Ordering */
         .voice-panel {
             flex: 1;
-            height: 100vh;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 2rem;
-            gap: 1.5rem;
+            background: radial-gradient(circle at center, #1e1b4b 0%, #020617 100%);
             position: relative;
         }
 
         .active-table-badge {
-            background: #fff;
-            padding: 0.5rem 1.2rem;
-            border-radius: 100px;
-            font-weight: 800;
-            font-size: 0.9rem;
-            box-shadow: var(--card-shadow);
-            border: 1px solid #eee;
-            color: var(--primary);
-            display: flex;
-            align-items: center;
-            gap: 0.4rem;
             position: absolute;
-            top: 1.2rem;
-            right: 1.5rem;
+            top: 2rem;
+            right: 2rem;
+            background: var(--glass-heavy);
+            padding: 0.75rem 1.5rem;
+            border-radius: 100px;
+            border: 1px solid var(--glass-border);
+            font-weight: 700;
         }
 
-        .mic-container {
-            position: relative;
+        /* Advanced Waveform Visualizer */
+        .visualizer {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            height: 60px;
+            margin-bottom: 2rem;
+            opacity: 0;
+            transition: 0.5s;
+        }
+
+        .recording .visualizer {
+            opacity: 1;
+        }
+
+        .bar {
+            width: 4px;
+            height: 100%;
+            background: var(--primary);
+            border-radius: 10px;
+            animation: bounce 0.8s infinite ease-in-out;
+        }
+
+        @keyframes bounce {
+
+            0%,
+            100% {
+                height: 10px;
+            }
+
+            50% {
+                height: 60px;
+            }
         }
 
         .mic-btn {
-            width: 130px;
-            height: 130px;
+            width: 140px;
+            height: 140px;
             border-radius: 50%;
             background: var(--primary-gradient);
-            border: none;
+            border: 4px solid rgba(255, 255, 255, 0.1);
             cursor: pointer;
+            box-shadow: 0 0 50px var(--accent-glow);
+            transition: 0.4s;
             display: flex;
             justify-content: center;
             align-items: center;
-            box-shadow: 0 15px 40px rgba(255, 69, 0, 0.4);
-            z-index: 2;
-            position: relative;
-            transition: transform 0.2s;
         }
 
-        .mic-btn:active {
-            transform: scale(0.9);
-        }
-
-        .mic-btn i {
-            color: #fff;
-            width: 50px;
-            height: 50px;
-        }
-
-        .pulse-ring,
-        .pulse-ring-2 {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            background: var(--primary);
-            z-index: 1;
-            display: none;
-        }
-
-        .pulse-ring {
-            opacity: 0.3;
-        }
-
-        .pulse-ring-2 {
-            opacity: 0.2;
-            z-index: 0;
-        }
-
-        .recording .pulse-ring {
-            display: block;
-            animation: ring-pulse 2s infinite ease-out;
-        }
-
-        .recording .pulse-ring-2 {
-            display: block;
-            animation: ring-pulse 2s infinite ease-out 0.5s;
-        }
-
-        @keyframes ring-pulse {
-            0% {
-                transform: scale(1);
-                opacity: 0.5;
-            }
-
-            100% {
-                transform: scale(3);
-                opacity: 0;
-            }
-        }
-
-        @keyframes cardReveal {
-            from {
-                opacity: 0;
-                transform: translateY(30px) scale(0.9);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0) scale(1);
-            }
-        }
-
-        @keyframes slideDown {
-            from {
-                opacity: 0;
-                transform: translateY(-30px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+        .recording .mic-btn {
+            transform: scale(1.1);
+            box-shadow: 0 0 80px var(--primary);
+            border-color: #fff;
         }
 
         .assistant-card {
+            margin-top: 3rem;
             background: var(--glass);
-            padding: 1.5rem 2rem;
-            border-radius: 28px;
-            width: 100%;
-            max-width: 420px;
-            min-height: 120px;
-            box-shadow: var(--card-shadow);
-            border: 1px solid #fff;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            padding: 2.5rem;
+            border-radius: 40px;
+            width: 500px;
             text-align: center;
-        }
-
-        #transcript {
-            font-weight: 500;
-            color: var(--text-muted);
-            margin-bottom: 0.8rem;
-            font-style: italic;
-            font-size: 0.9rem;
+            backdrop-filter: blur(20px);
         }
 
         #assistant-reply {
             font-family: 'Outfit', sans-serif;
-            font-size: 1.4rem;
-            font-weight: 700;
-            color: var(--primary);
-            line-height: 1.3;
-        }
-
-        .action-footer {
-            display: flex;
-            gap: 0.8rem;
-            width: 100%;
-            max-width: 420px;
-        }
-
-        .secondary-btn {
-            background: #fff;
-            border: 1px solid #eee;
-            padding: 1rem;
-            border-radius: 18px;
-            flex: 1;
-            font-weight: 700;
-            cursor: pointer;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.02);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            font-size: 0.9rem;
-        }
-
-        .primary-btn {
-            background: #2d3436;
-            color: #fff;
-            border: none;
-            padding: 1rem;
-            border-radius: 18px;
-            flex: 1.5;
-            font-weight: 800;
-            cursor: pointer;
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
-            font-size: 0.9rem;
-        }
-
-        /* Branding in voice panel */
-        .voice-branding {
-            position: absolute;
-            top: 1.2rem;
-            left: 1.5rem;
-        }
-
-        .voice-branding h1 {
-            font-family: 'Outfit', sans-serif;
             font-size: 1.8rem;
-            font-weight: 900;
-            background: var(--primary-gradient);
+            font-weight: 700;
+            background: linear-gradient(to right, #fff, #94a3b8);
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
-            letter-spacing: -1px;
+        }
+
+        .action-footer {
+            margin-top: 2rem;
+            display: flex;
+            gap: 1.5rem;
+        }
+
+        .btn {
+            padding: 1.25rem 2.5rem;
+            border-radius: 20px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: 0.3s;
+            border: none;
+            font-size: 1rem;
+        }
+
+        .btn-sec {
+            background: var(--glass-heavy);
+            color: #fff;
+        }
+
+        .btn-pri {
+            background: #fff;
+            color: #000;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            opacity: 0.9;
         }
     </style>
 </head>
 
 <body>
-    <div class="bg-glow bg-glow-1"></div>
-    <div class="bg-glow bg-glow-2"></div>
-    <div class="container">
+    <div class="mesh-bg"></div>
+    <div class="bg-glow"></div>
+
+    <div class="container" id="selection-container">
         <!-- SCREEN 1: TABLE SELECTION -->
         <div id="table-screen">
             <h1 class="logo-large">Pooja</h1>
-            <p class="subtitle">Select your table to start ordering</p>
+            <p class="subtitle">PREMIUM VOICE ORDERING</p>
             <div class="table-grid">
                 <div class="table-card" onclick="selectTable('1')">
                     <i data-lucide="utensils"></i>
@@ -531,50 +395,53 @@
         </div>
     </div>
 
-    <!-- SCREEN 2: VOICE ORDERING (Full-screen split layout) -->
+    <!-- SCREEN 2: VOICE ORDERING -->
     <div id="order-screen">
         <div class="order-layout">
             <!-- LEFT: Menu Panel -->
             <div class="menu-panel">
                 <div class="menu-panel-header">
-                    <i data-lucide="book-open" style="width:20px; color: var(--primary);"></i>
-                    <h2>Our Menu</h2>
+                    <i data-lucide="command" style="width:24px; color: var(--primary);"></i>
+                    <h2>Menu</h2>
                 </div>
                 <div class="menu-scroll-area" id="menu-items-container">
-                    <p style="color: var(--text-muted); font-style: italic;">Loading menu...</p>
+                    <p style="color: var(--text-muted); font-style: italic;">Syncing menu...</p>
                 </div>
             </div>
 
             <!-- RIGHT: Voice Ordering Panel -->
             <div class="voice-panel">
-                <div class="voice-branding">
-                    <h1>Pooja</h1>
+                <div class="active-table-badge">
+                    TABLE <span id="selected-table-id">1</span>
                 </div>
 
-                <div class="active-table-badge">
-                    <i data-lucide="map-pin" style="width:14px;"></i>
-                    Table <span id="selected-table-id">1</span>
+                <div class="visualizer" id="visualizer">
+                    <div class="bar"></div>
+                    <div class="bar" style="animation-delay: 0.1s"></div>
+                    <div class="bar" style="animation-delay: 0.2s"></div>
+                    <div class="bar" style="animation-delay: 0.3s"></div>
+                    <div class="bar" style="animation-delay: 0.1s"></div>
+                    <div class="bar" style="animation-delay: 0.4s"></div>
+                    <div class="bar" style="animation-delay: 0.2s"></div>
                 </div>
 
                 <div class="mic-container" id="mic-container">
-                    <div class="pulse-ring"></div>
-                    <div class="pulse-ring-2"></div>
                     <button class="mic-btn" id="mic-btn">
-                        <i data-lucide="mic"></i>
+                        <i data-lucide="mic" style="width:50px; height:50px; color:#fff;"></i>
                     </button>
                 </div>
 
                 <div class="assistant-card">
-                    <p id="transcript">Tap the mic to order...</p>
-                    <p id="assistant-reply">"Jai Shri Krishna! What can I get for you today?"</p>
+                    <p id="assistant-reply">"Jai Shri Krishna! Ready for your order."</p>
+                    <p id="transcript" style="margin-top:1rem; opacity:0.6; font-size:0.9rem;">Tap to start...</p>
                 </div>
 
                 <div class="action-footer">
-                    <button class="secondary-btn" onclick="goBack()">
-                        <i data-lucide="arrow-left" style="width:16px;"></i> Back
+                    <button class="btn btn-sec" onclick="goBack()">
+                        <i data-lucide="chevron-left" style="width:20px;"></i> Exit
                     </button>
-                    <button class="primary-btn" onclick="finishOrder()">
-                        FINISH & PAY
+                    <button class="btn btn-pri" onclick="finishOrder()">
+                        Complete Order
                     </button>
                 </div>
             </div>
@@ -606,7 +473,7 @@
             currentTableId = id;
             document.getElementById('selected-table-id').innerText = id;
             document.getElementById('table-screen').style.display = 'none';
-            document.querySelector('.container').style.display = 'none';
+            document.getElementById('selection-container').style.display = 'none';
             document.getElementById('order-screen').style.display = 'block';
             loadMenu();
             lucide.createIcons();
@@ -654,7 +521,7 @@
 
         function goBack() {
             document.getElementById('order-screen').style.display = 'none';
-            document.querySelector('.container').style.display = '';
+            document.getElementById('selection-container').style.display = '';
             document.getElementById('table-screen').style.display = 'flex';
         }
 
@@ -680,9 +547,9 @@
                 };
                 mediaRecorder.start();
                 isRecording = true;
-                micContainer.classList.add('recording');
-                transcriptText.innerText = "Listening...";
-                assistantReply.innerText = "Listening to your request...";
+                document.getElementById('order-screen').classList.add('recording');
+                transcriptText.innerText = "Syncing with voice...";
+                assistantReply.innerText = "I'm Listening...";
             } catch (err) {
                 alert("Microphone access denied.");
             }
@@ -691,8 +558,8 @@
         function stopRecording() {
             mediaRecorder.stop();
             isRecording = false;
-            micContainer.classList.remove('recording');
-            transcriptText.innerText = "Processing...";
+            document.getElementById('order-screen').classList.remove('recording');
+            transcriptText.innerText = "Analyzing...";
         }
 
         async function sendAudio(blob) {

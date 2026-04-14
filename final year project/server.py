@@ -19,6 +19,12 @@ from tts_service import generate_speech
 import response_service
 import inventory_service
 
+try:
+    import winsound
+except ImportError:
+    winsound = None
+
+
 # Use a menu dictionary for prices and categories
 MENU_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "menu.json")
 def load_menu():
@@ -119,6 +125,8 @@ async def get_dashboard_stats(table_id: Optional[str] = None):
                 total_revenue += price * qty
                 total_active_items += 1
 
+    print(f"DEBUG: [STATS] tables_active: {tables_active}, total_items: {total_active_items}, revenue: {total_revenue}")
+    
     return {
         "active_orders": total_active_items,
         "revenue": round(total_revenue, 2),
@@ -126,6 +134,7 @@ async def get_dashboard_stats(table_id: Optional[str] = None):
         "avg_order_value": round(total_revenue / total_active_items, 2) if total_active_items > 0 else 0,
         "total_tables_active": tables_active
     }
+
 
 @app.get("/order/state")
 async def get_order_state(table_id: str = "default"):
@@ -135,7 +144,11 @@ async def get_order_state(table_id: str = "default"):
 @app.get("/order/all_states")
 async def get_all_order_states():
     """Returns the order states for all tables."""
-    return tables_state
+    # Convert defaultdict to regular dict for clean JSON serialization
+    serialized_states = {tid: state for tid, state in tables_state.items() if state["confirmed"]}
+    print(f"DEBUG: [ALL_STATES] Returning {len(serialized_states)} active table states.")
+    return serialized_states
+
 
 @app.get("/inventory/status")
 async def get_inventory_status():
@@ -174,148 +187,14 @@ async def classify(transcript: str = Form(...), table_id: str = Form("default"))
     """
     current_order_state = get_table_state(table_id)
     try:
-        # --- Handle Corrections First ---
-        if detect_correction(transcript, threshold=0.30):
-            current_items = list(current_order_state["confirmed"].keys())
-            corrections = process_correction(transcript, current_order_items=current_items)
-            
-            # Filter corrections: Separate confident ones from those needing confirmation
-            AUTO_REPLACE_THRESHOLD = 0.85
-            CONFIRMATION_THRESHOLD = 0.55
-            
-            confident_corrections = []
-            to_confirm = []
-            
-            for c in corrections:
-                score = c.get("score", 1.0) # Default to 1.0 if not a matchable action
-                if score >= AUTO_REPLACE_THRESHOLD:
-                    confident_corrections.append(c)
-                elif score >= CONFIRMATION_THRESHOLD:
-                    to_confirm.append(c)
-                    print(f"DEBUG: Correction for '{c.get('original_spoken')}' needs confirmation (Score: {score})")
-                else:
-                    print(f"DEBUG: Correction for '{c.get('original_spoken')}' rejected (Score: {score})")
-
-            # Process additives/addons for confident corrections
-            from addon_extractor import extract_addons
-            for c in confident_corrections:
-                if c.get("addons"):
-                    c["addons"] = extract_addons(" ".join(c["addons"]))["addons"]
-
-            # Apply ONLY confident corrections to current_order_state
-            from ordering_workflow import apply_confirmed_corrections
-            new_confirmed, changed, unavailable_items = apply_confirmed_corrections(current_order_state["confirmed"].copy(), confident_corrections)
-            
-            response_text = ""
-            if changed or (confident_corrections and confident_corrections[0].get("action") == "cancel_all"):
-                current_order_state["confirmed"] = new_confirmed
-                response_text = response_service.get_correction_feedback_text(confident_corrections)
-            
-            if unavailable_items:
-                avail_msg = response_service.get_availability_feedback_text(unavailable_items)
-                response_text = f"{response_text} {avail_msg}".strip()
-
-            # Handle items needing confirmation
-            if to_confirm:
-                c = to_confirm[0] # Handle first one for now
-                sug_dish = c.get("dish") or c.get("new_dish") or c.get("original_dish")
-                orig_spoken = c.get("original_spoken")
-                
-                # Use structured addon extractor for corrections too
-                from addon_extractor import extract_addons
-                structured_addons = extract_addons(" ".join(c.get("addons", [])))["addons"]
-                
-                # Store as pending - IMPORTANT: Convert addons to list for frontend
-                from addon_extractor import merge_structured_addons
-                current_order_state["pending_confirmation"] = {
-                    "original": orig_spoken,
-                    "suggested": sug_dish,
-                    "quantity": c.get("quantity", 1),
-                    "addons": merge_structured_addons([], structured_addons),
-                    "action": c.get("action"),
-                    "is_correction": True # Mark it as a correction-originated pending
-                }
-                
-                confirm_msg = response_service.get_confirm_text(sug_dish, orig_spoken)
-                if response_text:
-                    response_text += " " + confirm_msg
-                else:
-                    response_text = confirm_msg
-
-            if response_text:
-                # Generate and Play TTS
-                speech_b64 = generate_speech(response_text)
-                if speech_b64:
-                    def play_async():
-                        try: 
-                            if winsound:
-                                winsound.PlaySound(base64.b64decode(speech_b64), winsound.SND_MEMORY)
-                        except: pass
-                    asyncio.create_task(asyncio.to_thread(play_async))
-                
-                # Return result for the correction
-                return {
-                    "classification": {
-                        "confirmed": confident_corrections, 
-                        "needs_confirmation": to_confirm, 
-                        "not_in_menu": [], 
-                        "is_finished": False, 
-                        "intent": "correction"
-                    },
-                    "response_text": response_text,
-                    "speech": speech_b64,
-                    "current_order": current_order_state["confirmed"],
-                    "is_finished": False
-                }
-            else:
-                print("DEBUG: Correction detected but no valid items affected. Falling back to regular classification.")
-                # Proceed to regular classification...
-
-        # --- Regular Classification ---
-        from classifier_service import detect_intent
-        py_intent, py_confidence = detect_intent(transcript)
-        
+        # --- Unified Classification ---
         # Prepare order summary for LLM context
         confirmed_list = [f"{v['quantity']} {d}" for d, v in current_order_state["confirmed"].items()]
         order_summary = ", ".join(confirmed_list) if confirmed_list else "Order is empty"
 
-        # If we have a very strong intent for a short transcript, handle it without LLM
-        if py_intent and py_confidence >= 0.9:
-            print(f"DEBUG: Python-based intent detected: {py_intent}")
-            pending = current_order_state.get("pending_confirmation")
-            
-            if py_intent == "affirmative" and pending:
-                sug_dish = pending["suggested"]
-                sug_qty = pending.get("quantity", 1)
-                sug_addons = pending.get("addons", [])
-                current_order_state["pending_confirmation"] = None
-                from addon_extractor import merge_structured_addons
-                if sug_dish in current_order_state["confirmed"]:
-                    current_order_state["confirmed"][sug_dish]["quantity"] += sug_qty
-                    current_order_state["confirmed"][sug_dish]["addons"] = merge_structured_addons(
-                        current_order_state["confirmed"][sug_dish]["addons"], 
-                        {a: "add" for a in sug_addons} if isinstance(sug_addons, list) else sug_addons
-                    )
-                else:
-                    current_order_state["confirmed"][sug_dish] = {
-                        "dish": sug_dish, 
-                        "quantity": sug_qty, 
-                        "addons": sug_addons if isinstance(sug_addons, list) else merge_structured_addons([], sug_addons)
-                    }
-                result = {"intent": "affirmative", "response_text": f"Theek hai, adding {sug_qty} {sug_dish} to your order.", "items": [], "is_finished": False}
-            
-            elif py_intent == "negative" and pending:
-                current_order_state["pending_confirmation"] = None
-                result = {"intent": "negative", "response_text": "Theek hai, I won't add that. What else would you like?", "items": [], "is_finished": False}
-            
-            elif py_intent == "finishing":
-                result = {"intent": "finishing", "response_text": response_service.get_final_order_text(current_order_state["confirmed"]), "items": [], "is_finished": True}
-            
-            else:
-                # Fallback to LLM if it's an intent but no context or logic for it
-                result = classify_order(transcript, order_summary)
-        else:
-            result = classify_order(transcript, order_summary)
+        # Call the unified classifier
+        result = await classify_order(transcript, order_summary)
+
         
         # --- Conversational Logic ---
         intent = result.get("intent")
@@ -372,141 +251,98 @@ async def classify(transcript: str = Form(...), table_id: str = Form("default"))
             conf_response = "Theek hai, I won't add that."
             confirmation_handled = True
 
-        # --- Item Processing ---
-        items_msg = ""
+        # --- Item & Modification Processing ---
+        items_msg = result.get("response_text", "")
+        
+        # 1. Process New Items (Only auto-confirm high-confidence matches)
         if result.get("items"):
-            # Load inventory for explicit server-side check
-            from classifier_service import fuzzy_match_dish
+            needs_conf_list = result.get("needs_confirmation", [])
+            print(f"DEBUG: Processing {len(result['items'])} items for table '{table_id}'")
             
-            # Get items that need confirmation to avoid adding them prematurely
-            needs_confirm_originals = [s.get("original", "").strip().lower() for s in result.get("needs_confirmation", [])]
-            suggested_dishes = [s.get("suggested", "").strip().lower() for s in result.get("needs_confirmation", [])]
-
-            # New items or modifications
-            unavailable_items = []
             for item in result["items"]:
                 dish_name = item["dish"]
+                qty = item.get("quantity", 1)
+                addons = item.get("addons", [])
                 
-                # SKIP if this item is currently being suggested for confirmation
-                if dish_name.strip().lower() in needs_confirm_originals or dish_name.strip().lower() in suggested_dishes:
-                    print(f"DEBUG: Skipping '{dish_name}' because it needs confirmation.")
+                # SKIP auto-adding if this item is in the "needs_confirmation" list
+                if any(nc["suggested"] == dish_name for nc in needs_conf_list):
+                    print(f"DEBUG: Skipping auto-add for '{dish_name}' (needs confirmation)")
                     continue
 
-                qty = item.get("quantity", 1)
-                portion = item.get("portion", "full")
-                modifier = "increase" if item.get("modifier") == "add" else item.get("modifier", "set")
-                addons = item.get("raw_addons", [])
-                
-                # Standardize dish name using fuzzy matching against inventory
-                matched_dish, score, is_amb = fuzzy_match_dish(dish_name)
-                
-                # Reject items that don't match any menu item
-                if score < 0.55 and not is_amb:
-                    print(f"DEBUG: Rejecting '{dish_name}' — not in menu (Score: {score:.2f})")
-                    continue
-                
-                final_dish_name = matched_dish.strip() if (score >= 0.30 or is_amb) else dish_name.strip()
-                
-                # Check Availability using standardized name
-                is_available, stock = inventory_service.check_availability(final_dish_name, qty)
+                # Check Availability
+                is_available, _ = inventory_service.check_availability(dish_name, qty)
                 if not is_available:
-                    print(f"DEBUG: {final_dish_name} is OUT OF STOCK (Stock: {stock}). Not adding to state.")
+                    print(f"DEBUG: {dish_name} is OUT OF STOCK. Not adding.")
                     continue
                 
-                # State update logic - AGGRESSIVE STRIPPING
-                portion = portion.strip() if portion else "full"
-                state_key = f"{portion} {final_dish_name}".strip() if portion != "full" else final_dish_name.strip()
-                
-                if state_key in current_order_state["confirmed"]:
-                    if modifier == "increase":
-                        current_order_state["confirmed"][state_key]["quantity"] += qty
-                    elif modifier == "decrease":
-                        new_qty = current_order_state["confirmed"][state_key]["quantity"] - qty
-                        if new_qty <= 0:
-                            del current_order_state["confirmed"][state_key]
-                        else:
-                            current_order_state["confirmed"][state_key]["quantity"] = new_qty
-                    else: # "set"
-                        if qty <= 0:
-                            if state_key in current_order_state["confirmed"]:
-                                del current_order_state["confirmed"][state_key]
-                        else:
-                            current_order_state["confirmed"][state_key]["quantity"] = qty
-                    
-                    if state_key in current_order_state["confirmed"]:
-                        from addon_extractor import extract_addons, merge_structured_addons
-                        from classifier_service import refine_addons_with_llm
-                        # Extract structured intent for the new addons
-                        raw_phrase = " ".join(addons)
-                        new_structured = extract_addons(raw_phrase)["addons"]
-                        
-                        # Decide: Python merge or LLM refinement?
-                        # Trigger LLM only for corrections/swaps as requested by user
-                        has_correction = any(act in ["remove", "swap", "remove_action"] for act in new_structured.values())
-                        
-                        if has_correction:
-                            print(f"DEBUG: Triggering targeted LLM refinement for '{state_key}' addons.")
-                            current_order_state["confirmed"][state_key]["addons"] = refine_addons_with_llm(
-                                state_key, 
-                                current_order_state["confirmed"][state_key]["addons"], 
-                                raw_phrase
-                            )
-                        else:
-                            # Intelligently merge into existing state using Python
-                            current_order_state["confirmed"][state_key]["addons"] = merge_structured_addons(
-                                current_order_state["confirmed"][state_key]["addons"], 
-                                new_structured
-                            )
+                print(f"DEBUG: Adding '{dish_name}' (qty: {qty}) to confirmed order for table '{table_id}'")
+                if dish_name in current_order_state["confirmed"]:
+                    current_order_state["confirmed"][dish_name]["quantity"] += qty
+                    # Merge addons
+                    current_order_state["confirmed"][dish_name]["addons"] = list(set(current_order_state["confirmed"][dish_name]["addons"] + addons))
                 else:
-                    if modifier != "decrease":
-                        current_order_state["confirmed"][state_key] = {"dish": state_key, "quantity": qty, "addons": addons}
+                    current_order_state["confirmed"][dish_name] = {"dish": dish_name, "quantity": qty, "addons": addons}
             
-            items_msg = result.get("response_text", "")
-            if not items_msg:
-                confirmed_list = [{"dish": d, "quantity": v["quantity"]} for d, v in current_order_state["confirmed"].items()]
-                items_msg = response_service.get_item_confirmed_text(confirmed_list)
-            
-            # Check for concurrent suggestions
-            if result.get("needs_confirmation"):
-                sug = result["needs_confirmation"][0]
-                # Extract orphan addons: words in 'original' not in 'suggested'
-                orig_lower = sug.get("original", "").lower()
-                sug_lower = sug.get("suggested", "").lower()
-                # Remove the dish name words from the original to get leftover addon phrase
-                leftover = orig_lower
-                for word in sug_lower.split():
-                    leftover = leftover.replace(word, "", 1)
-                leftover = leftover.strip()
-                # If leftover has meaningful words, store as fallback addon
-                existing_addons = sug.get("addons", [])
-                if leftover and leftover not in ["", sug_lower] and len(leftover.split()) >= 1:
-                    existing_addons = existing_addons + [leftover] if leftover not in existing_addons else existing_addons
-                sug["addons"] = existing_addons
-                current_order_state["pending_confirmation"] = sug
-                items_msg += " " + response_service.get_confirm_text(sug["suggested"], sug["original"])
+            # Store the first item that needs confirmation in the session state
+            if needs_conf_list:
+                current_order_state["pending_confirmation"] = needs_conf_list[0]
+                print(f"DEBUG: Set pending_confirmation for table '{table_id}': {needs_conf_list[0]['suggested']}")
+
+
+
+        # 2. Process Modifications
+        if result.get("modifications"):
+            from classifier_service import fuzzy_match_dish
+            for mod in result["modifications"]:
+                target = mod.get("target_item")
+                action = mod.get("action")
+                changes = mod.get("changes", {})
+                
+                # Find the target item in current order
+                matched_target, _, _ = fuzzy_match_dish(target)
+                if matched_target not in current_order_state["confirmed"]:
+                    # Try exact match if fuzzy fails
+                    if target not in current_order_state["confirmed"]:
+                        print(f"DEBUG: Modification target '{target}' not found in order.")
+                        continue
+                    else:
+                        matched_target = target
+
+                if action == "remove":
+                    del current_order_state["confirmed"][matched_target]
+                    print(f"DEBUG: Removed '{matched_target}'")
+                
+                elif action == "replace":
+                    new_item_name = changes.get("new_item")
+                    if new_item_name:
+                        matched_new, score, _ = fuzzy_match_dish(new_item_name)
+                        if score > 0.3:
+                            qty = current_order_state["confirmed"][matched_target]["quantity"]
+                            del current_order_state["confirmed"][matched_target]
+                            current_order_state["confirmed"][matched_new] = {
+                                "dish": matched_new, 
+                                "quantity": qty, 
+                                "addons": [f"{k}: {v}" for k, v in changes.items() if k != "new_item"]
+                            }
+                            print(f"DEBUG: Replaced '{matched_target}' with '{matched_new}'")
+
+                elif action in ["update", "add"]:
+                    # Update addons or quantity
+                    existing = current_order_state["confirmed"][matched_target]
+                    for k, v in changes.items():
+                        if k == "quantity":
+                            existing["quantity"] = v
+                        else:
+                            # Update or add addon phrase
+                            addon_phrase = f"{k}: {v}"
+                            if addon_phrase not in existing["addons"]:
+                                existing["addons"].append(addon_phrase)
+                    print(f"DEBUG: Updated '{matched_target}' with {changes}")
         
-        elif result.get("needs_confirmation"):
-            # Just suggestions (no items were confirmed)
-            sug = result["needs_confirmation"][0]
-            # Extract orphan addons: words in 'original' not in 'suggested'
-            orig_lower = sug.get("original", "").lower()
-            sug_lower = sug.get("suggested", "").lower()
-            leftover = orig_lower
-            for word in sug_lower.split():
-                leftover = leftover.replace(word, "", 1)
-            leftover = leftover.strip()
-            existing_addons = sug.get("addons", [])
-            if leftover and leftover not in ["", sug_lower] and len(leftover.split()) >= 1:
-                existing_addons = existing_addons + [leftover] if leftover not in existing_addons else existing_addons
-            sug["addons"] = existing_addons
-            current_order_state["pending_confirmation"] = sug
-            items_msg = response_service.get_confirm_text(sug["suggested"], sug["original"])
-        
-        elif is_finished:
-            items_msg = response_service.get_final_order_text(current_order_state["confirmed"])
-        
-        elif not confirmation_handled:
-            items_msg = "I'm sorry, I didn't quite catch that. Could you repeat?"
+        # fallback is_finished
+        if result.get("is_finished"):
+            is_finished = True
+
 
         # --- Final Response Construction ---
         if result.get("response_text") and not (intent in ["affirmative", "negative"] and pending):

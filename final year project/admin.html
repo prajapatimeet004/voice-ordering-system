@@ -13,15 +13,16 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         :root {
-            --primary: #6c5ce7;
-            --primary-gradient: linear-gradient(135deg, #6c5ce7, #a29bfe);
-            --bg-dark: #f0f3f7;
-            --bg-gradient: linear-gradient(to bottom right, #f0f3f7, #e0e6ed);
-            --glass: rgba(255, 255, 255, 0.9);
-            --glass-border: rgba(255, 255, 255, 0.4);
-            --text-dark: #1e293b;
-            --text-muted: #64748b;
-            --card-shadow: 0 10px 40px rgba(0, 0, 0, 0.06), 0 4px 10px rgba(0, 0, 0, 0.02);
+            --primary: #6366f1;
+            --primary-gradient: linear-gradient(135deg, #6366f1, #8b5cf6);
+            --bg-deep: #020617;
+            --card-bg: #0f172a;
+            --glass: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-light: #f1f5f9;
+            --text-muted: #94a3b8;
+            --card-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.5);
+            --accent-glow: rgba(99, 102, 241, 0.15);
         }
 
         * {
@@ -32,9 +33,8 @@
 
         body {
             font-family: 'Inter', system-ui, sans-serif;
-            background: var(--bg-gradient);
-            background-attachment: fixed;
-            color: var(--text-dark);
+            background: var(--bg-deep);
+            color: var(--text-light);
             min-height: 100vh;
             overflow-x: hidden;
         }
@@ -42,275 +42,204 @@
         .dashboard {
             max-width: 1600px;
             margin: 0 auto;
-            padding: 2rem;
+            padding: 2.5rem;
         }
 
         header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 3.5rem;
+            margin-bottom: 4rem;
         }
 
         .logo-text {
             font-family: 'Outfit', sans-serif;
-            font-size: 2.8rem;
+            font-size: 3rem;
             font-weight: 900;
-            background: var(--primary-gradient);
+            background: linear-gradient(to right, #fff, #94a3b8);
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
-            letter-spacing: -1px;
+            letter-spacing: -2px;
         }
 
         .admin-badge {
-            background: #fff;
-            padding: 0.6rem 1.2rem;
-            border-radius: 14px;
-            border: 1px solid #ddd;
+            background: var(--glass);
+            padding: 0.75rem 1.5rem;
+            border-radius: 100px;
+            border: 1px solid var(--glass-border);
             display: flex;
             align-items: center;
-            gap: 0.6rem;
+            gap: 0.75rem;
             font-weight: 800;
             color: var(--primary);
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.02);
+            box-shadow: 0 0 20px var(--accent-glow);
         }
 
         .pulse-dot {
             width: 10px;
             height: 10px;
-            background: #00b894;
+            background: #10b981;
             border-radius: 50%;
-            animation: pulse 2s infinite;
+            box-shadow: 0 0 15px #10b981;
+            animation: pulse-ring 2s infinite;
         }
 
-        @keyframes pulse {
+        @keyframes pulse-ring {
             0% {
                 transform: scale(0.95);
-                box-shadow: 0 0 0 0 rgba(0, 184, 148, 0.7);
+                opacity: 1;
             }
 
             70% {
-                transform: scale(1);
-                box-shadow: 0 0 0 10px rgba(0, 184, 148, 0);
+                transform: scale(1.5);
+                opacity: 0;
             }
 
             100% {
                 transform: scale(0.95);
-                box-shadow: 0 0 0 0 rgba(0, 184, 148, 0);
+                opacity: 0;
             }
         }
 
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 2rem;
-            margin-bottom: 4rem;
+            margin-bottom: 5rem;
         }
 
         .stat-card {
-            padding: 2rem;
-            border-radius: 30px;
-            background: #fff;
-            box-shadow: var(--card-shadow);
+            padding: 2.5rem;
+            border-radius: 32px;
+            background: var(--card-bg);
+            border: 1px solid var(--glass-border);
             display: flex;
             flex-direction: column;
             gap: 0.5rem;
-            border: 1px solid var(--glass-border);
-            position: relative;
-            overflow: hidden;
+            transition: 0.4s;
         }
 
-        .stat-card::after {
-            content: "";
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-            transform: rotate(45deg);
-            animation: shimmer 4s infinite linear;
-        }
-
-        @keyframes shimmer {
-            0% {
-                transform: translate(-100%, -100%) rotate(45deg);
-            }
-
-            100% {
-                transform: translate(100%, 100%) rotate(45deg);
-            }
+        .stat-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--primary);
         }
 
         .stat-label {
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             color: var(--text-muted);
             text-transform: uppercase;
-            font-weight: 800;
-            letter-spacing: 0.5px;
+            font-weight: 900;
+            letter-spacing: 2px;
         }
 
         .stat-value {
-            font-size: 2.5rem;
+            font-size: 3.5rem;
             font-weight: 900;
-            color: var(--text-dark);
+            color: #fff;
+            font-family: 'Outfit', sans-serif;
         }
 
         .order-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-            gap: 2.5rem;
+            grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
+            gap: 3rem;
         }
 
         .order-card {
-            background: #fff;
-            padding: 2rem;
-            border-radius: 35px;
-            box-shadow: var(--card-shadow);
+            background: var(--card-bg);
+            padding: 2.5rem;
+            border-radius: 40px;
+            border: 1px solid var(--glass-border);
             display: flex;
             flex-direction: column;
-            gap: 1.5rem;
-            border: 1px solid #f1f5f9;
-            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-            animation: orderSlideIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
-        }
-
-        @keyframes orderSlideIn {
-            from {
-                opacity: 0;
-                transform: translateX(30px) scale(0.98);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateX(0) scale(1);
-            }
+            gap: 2rem;
+            transition: all 0.4s;
         }
 
         .order-card:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.1);
+            transform: translateY(-5px);
+            border-color: var(--primary);
+            box-shadow: 0 40px 80px rgba(0, 0, 0, 0.4);
         }
 
         .order-card-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid #f1f5f9;
         }
 
-        .table-info {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-
-        .table-icon {
-            background: var(--primary-gradient);
+        .table-badge {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.8rem;
+            font-weight: 900;
             color: #fff;
-            width: 45px;
-            height: 45px;
-            border-radius: 14px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            box-shadow: 0 4px 15px rgba(108, 92, 231, 0.3);
         }
 
-        .new-badge {
-            background: #00b894;
-            color: #fff;
-            padding: 0.5rem 1.2rem;
+        .status-pill {
+            background: rgba(16, 185, 129, 0.1);
+            color: #10b981;
+            padding: 0.5rem 1rem;
             border-radius: 12px;
-            font-weight: 800;
-            font-size: 0.85rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
+            font-weight: 900;
+            font-size: 0.75rem;
+            letter-spacing: 1px;
+            border: 1px solid rgba(16, 185, 129, 0.2);
         }
 
-        .item-row-card {
-            background: #f8fafc;
-            padding: 1.2rem;
+        .item-row {
+            background: rgba(255, 255, 255, 0.02);
+            padding: 1.5rem;
             border-radius: 20px;
             display: flex;
             align-items: center;
-            gap: 1.2rem;
+            gap: 1.5rem;
             margin-bottom: 1rem;
-            border: 1px solid #f1f5f9;
+            border: 1px solid var(--glass-border);
         }
 
-        .qty-circle {
-            width: 32px;
-            height: 32px;
-            background: var(--primary);
+        .qty-box {
+            background: var(--primary-gradient);
             color: #fff;
-            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
             display: flex;
             justify-content: center;
             align-items: center;
             font-weight: 900;
-            font-size: 0.9rem;
-        }
-
-        .item-details {
-            flex: 1;
         }
 
         .item-name {
-            font-weight: 800;
-            color: #1e293b;
+            font-weight: 700;
             font-size: 1.1rem;
+            color: #fff;
         }
 
-        .item-addons {
+        .item-meta {
             font-size: 0.85rem;
-            color: #64748b;
-            margin-top: 2px;
-            font-weight: 500;
-        }
-
-        .item-price {
-            font-weight: 900;
-            color: #475569;
-            font-size: 1.1rem;
-        }
-
-        .order-total-section {
-            margin-top: 0.5rem;
-            padding-top: 1.5rem;
-            border-top: 2px dashed #e2e8f0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .total-price {
-            font-size: 2rem;
-            font-weight: 950;
-            color: var(--primary);
+            color: var(--text-muted);
+            margin-top: 4px;
         }
 
         .serve-btn {
-            background: #1e293b;
-            color: #fff;
+            background: #fff;
+            color: #000;
             border: none;
-            padding: 1.2rem;
-            border-radius: 22px;
+            padding: 1.25rem;
+            border-radius: 24px;
             width: 100%;
-            font-weight: 800;
-            font-size: 1.1rem;
+            font-weight: 900;
+            font-size: 1rem;
             cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-            margin-top: 0.5rem;
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            transition: 0.3s;
+            margin-top: 1rem;
         }
 
         .serve-btn:hover {
-            background: #0f172a;
-            transform: scale(1.03);
+            background: var(--primary);
+            color: #fff;
+            transform: scale(1.02);
             box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15);
         }
     </style>
@@ -320,23 +249,22 @@
     <div class="dashboard">
         <header>
             <div class="header-left">
-                <h1 class="logo-text">
-                    Pooja <span
-                        style="font-size: 1.4rem; -webkit-text-fill-color: #64748b; font-weight: 600; font-family: 'Inter';">Kitchen
-                        Display</span>
+                <h1 class="logo-text">Pooja <span
+                        style="font-size: 1.2rem; color: #64748b; font-weight: 600; font-family: 'Inter'; letter-spacing: 0;">Kitchen</span>
                 </h1>
-                <div id="clock" style="font-weight: 700; color: #94a3b8; font-size: 1.1rem; margin-top: 4px;"></div>
+                <div id="clock"
+                    style="font-weight: 700; color: #475569; font-size: 1rem; margin-top: 5px; opacity: 0.8;"></div>
             </div>
 
             <div class="admin-badge">
                 <div class="pulse-dot"></div>
-                LIVE MONITORING
+                LIVE MONITOR
             </div>
 
             <div class="header-actions">
                 <button onclick="location.reload()"
-                    style="padding: 1rem 2rem; border-radius: 22px; border: none; background: #fff; color: var(--primary); font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 0.8rem; box-shadow: var(--card-shadow); border: 1px solid #edf2f7; font-size: 1rem;">
-                    <i data-lucide="refresh-cw" style="width: 20px;"></i> Refresh
+                    style="padding: 0.75rem 1.5rem; border-radius: 100px; border: 1px solid var(--glass-border); background: var(--glass); color: #fff; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 0.75rem; font-size: 0.9rem;">
+                    <i data-lucide="refresh-cw" style="width: 18px;"></i> Sync
                 </button>
             </div>
         </header>
@@ -347,11 +275,11 @@
                 <span class="stat-value" id="active-tables-val">0</span>
             </div>
             <div class="stat-card">
-                <span class="stat-label">Total Items</span>
+                <span class="stat-label">Order Volume</span>
                 <span class="stat-value" id="active-orders-val">0</span>
             </div>
             <div class="stat-card" style="background: var(--primary-gradient);">
-                <span class="stat-label" style="color:rgba(255,255,255,0.8);">Total Revenue</span>
+                <span class="stat-label" style="color:rgba(255,255,255,0.7);">Daily Revenue</span>
                 <span class="stat-value" id="revenue-val" style="color:#fff;">₹0</span>
             </div>
         </section>
@@ -429,39 +357,27 @@
             card.className = 'order-card';
 
             let itemsHtml = '';
-            let total = 0;
-
             for (const [item, details] of Object.entries(confirmed)) {
                 const qty = details.quantity || 1;
-                const itemInfo = menuData[item] || { price: 150 };
-                const subtotal = qty * itemInfo.price;
-                total += subtotal;
+                const addons = Array.isArray(details.addons) ? details.addons.join(', ') : (details.addons ? Object.keys(details.addons).join(', ') : 'Standard');
 
                 itemsHtml += `
-                    <div class="item-row-card">
-                        <div class="qty-circle">${qty}</div>
-                        <div class="item-details">
+                    <div class="item-row">
+                        <div class="qty-box">${qty}</div>
+                        <div>
                             <div class="item-name">${item}</div>
-                            <div class="item-addons">${Array.isArray(details.addons) ? details.addons.join(', ') : (details.addons ? Object.keys(details.addons).join(', ') : 'No addons')}</div>
+                            <div class="item-meta">${addons}</div>
                         </div>
-                        <div class="item-price">₹${subtotal}</div>
                     </div>
                 `;
             }
 
             card.innerHTML = `
                 <div class="order-card-header">
-                    <div class="table-info">
-                         <div class="table-icon"><i data-lucide="hash" style="width:24px;"></i></div>
-                         <div><b style="font-size:1.3rem; color:#1e293b;">Table ${tableId}</b></div>
-                    </div>
-                    <div class="new-badge"><i data-lucide="check-circle" style="width:16px;"></i> PREPARING</div>
+                    <div class="table-badge">Table ${tableId}</div>
+                    <div class="status-pill">PREPARING</div>
                 </div>
                 <div style="flex:1;">${itemsHtml}</div>
-                <div class="order-total-section">
-                    <span style="font-weight:700; color:#64748b; font-size:1.1rem;">Total Bill</span>
-                    <span class="total-price">₹${total}</span>
-                </div>
                 <button class="serve-btn" onclick="clearTable('${tableId}')">MARK AS SERVED</button>
             `;
             container.appendChild(card);

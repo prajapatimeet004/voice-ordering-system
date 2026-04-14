@@ -2,8 +2,8 @@ import os
 import json
 import re
 from dotenv import load_dotenv
-from classifier_service import fuzzy_match_dish
 from groq import Groq
+
 import inventory_service
 
 load_dotenv(override=True)
@@ -137,6 +137,7 @@ CORRECTION_DICT = {
     ]
 }
 
+
 # Lazy-loaded embedding model and pre-calculated keyword embeddings
 _embedding_model = None
 _all_correction_phrases = []
@@ -150,65 +151,127 @@ def get_embedding_model():
         from sentence_transformers import SentenceTransformer
         _embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
         
-        # Collect all unique correction phrases
+        # Collect all unique correction phrases and map back to categories
         _all_correction_phrases = []
-        for phrases in CORRECTION_DICT.values():
-            _all_correction_phrases.extend(phrases)
+        _phrase_to_category = {}
+        for category, phrases in CORRECTION_DICT.items():
+            for p in phrases:
+                _all_correction_phrases.append(p)
+                _phrase_to_category[p] = category
         _all_correction_phrases = list(set(_all_correction_phrases)) # Unique only
-        
+
         # Pre-calculate embeddings
+        import torch
         _correction_embeddings = _embedding_model.encode(_all_correction_phrases, convert_to_tensor=True)
+        _embedding_model.phrase_to_category = _phrase_to_category
+        _embedding_model.all_phrases = _all_correction_phrases
+
         
     return _embedding_model, _all_correction_phrases, _correction_embeddings
 
+def get_correction_hints(transcript: str, threshold: float = 0.60):
+    """
+    Performs semantic search against the CORRECTION_DICT keywords to find relevant intent hints.
+    Returns: (List of hints, Latency in ms)
+    """
+    from sentence_transformers import util
+    import time
+    
+    start_time = time.perf_counter()
+    model, phrases, embeddings = get_embedding_model()
+    
+    # Embed the transcript (treat it as a query)
+    transcript_embedding = model.encode(transcript, convert_to_tensor=True)
+    
+    # Calculate cosine similarities
+    cosine_scores = util.cos_sim(transcript_embedding, embeddings)[0]
+    
+    # Extract matches above threshold
+    results = []
+    for i, score in enumerate(cosine_scores):
+        if score >= threshold:
+            phrase = phrases[i]
+            category = getattr(model, 'phrase_to_category', {}).get(phrase, "unknown")
+            results.append({
+                "category": category,
+                "matched_keyword": phrase,
+                "score": float(score)
+            })
+    
+    # Sort by score
+    results.sort(key=lambda x: x["score"], reverse=True)
+    
+    # Return unique categories found
+    seen_categories = set()
+    hints = []
+    for r in results:
+        if r["category"] not in seen_categories:
+            hints.append(r)
+            seen_categories.add(r["category"])
+            
+    end_time = time.perf_counter()
+    duration_ms = (end_time - start_time) * 1000
+    
+    return hints, duration_ms
+
+
 def detect_correction(transcript: str, threshold=0.30):
     """
-    Checks if the transcript contains any intent similar to correction keywords 
-    using a Hybrid approach: 60% Semantic + 40% Fuzzy Keywords.
+    Disabled local detection for transition to unified LLM intent detection.
+    Always returns False to ensure server proceeds to primary LLM classification.
     """
-    if not transcript.strip():
-        return False
-        
-    # Get model and pre-calculated data
-    model, dictionary_phrases, dictionary_embeddings = get_embedding_model()
-    
-    # Pre-process transcript: split into words and bigrams
-    words = re.sub(r'[^a-zA-Z0-9\s]', '', transcript.lower()).split()
-    if not words:
-        return False
-        
-    tokens = list(set(words)) # Start with unique words
-    # Add bigrams for phrases like "not that", "nahi nahi"
-    for i in range(len(words) - 1):
-        tokens.append(f"{words[i]} {words[i+1]}")
-    
-    # 1. Semantic Search
-    token_embeddings = model.encode(tokens, convert_to_tensor=True)
-    from sentence_transformers import util
-    import torch
-    similarity_matrix = util.cos_sim(token_embeddings, dictionary_embeddings)
-    semantic_score = torch.max(similarity_matrix).item()
-    
-    # 2. Fuzzy Search (Keyword/String similarity)
-    from rapidfuzz import process, fuzz
-    # Check each token against the dictionary
-    fuzzy_best_score = 0
-    for token in tokens:
-        _, f_score, _ = process.extractOne(token, dictionary_phrases, scorer=fuzz.ratio)
-        if f_score > fuzzy_best_score:
-            fuzzy_best_score = f_score
-    
-    fuzzy_score = fuzzy_best_score / 100.0 # Normalize 0.0 - 1.0
+    return False
 
-    # 3. Hybrid Calculation (60/40)
-    hybrid_score = (semantic_score * 0.6) + (fuzzy_score * 0.4)
-    
-    if hybrid_score >= threshold:
-        print(f"DEBUG: Correction detected! (Semantic: {semantic_score:.4f}, Fuzzy: {fuzzy_score:.4f}, Hybrid: {hybrid_score:.4f})")
-    else:
-        print(f"DEBUG: Max hybrid correction score: {hybrid_score:.4f}")
-    
-    return hybrid_score >= threshold
+# ORIGINAL detect_correction implementation (Commented out)
+# def detect_correction(transcript: str, threshold=0.30):
+#     """
+#     Checks if the transcript contains any intent similar to correction keywords 
+#     using a Hybrid approach: 60% Semantic + 40% Fuzzy Keywords.
+#     """
+#     if not transcript.strip():
+#         return False
+#         
+#     # Get model and pre-calculated data
+#     model, dictionary_phrases, dictionary_embeddings = get_embedding_model()
+#     
+#     # Pre-process transcript: split into words and bigrams
+#     words = re.sub(r'[^a-zA-Z0-9\s]', '', transcript.lower()).split()
+#     if not words:
+#         return False
+#         
+#     tokens = list(set(words)) # Start with unique words
+#     # Add bigrams for phrases like "not that", "nahi nahi"
+#     for i in range(len(words) - 1):
+#         tokens.append(f"{words[i]} {words[i+1]}")
+#     
+#     # 1. Semantic Search
+#     token_embeddings = model.encode(tokens, convert_to_tensor=True)
+#     from sentence_transformers import util
+#     import torch
+#     similarity_matrix = util.cos_sim(token_embeddings, dictionary_embeddings)
+#     semantic_score = torch.max(similarity_matrix).item()
+#     
+#     # 2. Fuzzy Search (Keyword/String similarity)
+#     from rapidfuzz import process, fuzz
+#     # Check each token against the dictionary
+#     fuzzy_best_score = 0
+#     for token in tokens:
+#         _, f_score, _ = process.extractOne(token, dictionary_phrases, scorer=fuzz.ratio)
+#         if f_score > fuzzy_best_score:
+#             fuzzy_best_score = f_score
+#     
+#     fuzzy_score = fuzzy_best_score / 100.0 # Normalize 0.0 - 1.0
+# 
+#     # 3. Hybrid Calculation (60/40)
+#     hybrid_score = (semantic_score * 0.6) + (fuzzy_score * 0.4)
+#     
+#     if hybrid_score >= threshold:
+#         print(f"DEBUG: Correction detected! (Semantic: {semantic_score:.4f}, Fuzzy: {fuzzy_score:.4f}, Hybrid: {hybrid_score:.4f})")
+#     else:
+#         print(f"DEBUG: Max hybrid correction score: {hybrid_score:.4f}")
+#     
+#     return hybrid_score >= threshold
+
 
 # Pre-defined Response Schema for Order Corrections
 CORRECTION_SCHEMA = {
@@ -364,14 +427,18 @@ def process_correction(transcript: str, current_order_items=None):
                 corr["original_spoken"] = new if new else (dish if dish else (orig if orig else "item"))
                 
                 if orig:
+                    from classifier_service import fuzzy_match_dish
                     matched_orig, score_orig, is_amb_orig = fuzzy_match_dish(orig)
+
                     corr["original_dish"] = matched_orig if (score_orig >= 0.30 or is_amb_orig) else orig
                     corr["score_orig"] = score_orig
                 
                 # Handle both 'new' (replacement) and 'dish' (modification)
                 target_to_match = new if new else dish
                 if target_to_match:
+                    from classifier_service import fuzzy_match_dish
                     matched, score, is_amb = fuzzy_match_dish(target_to_match)
+
                     if new:
                         corr["new_dish"] = matched if (score >= 0.30 or is_amb) else new
                     else:
@@ -385,7 +452,9 @@ def process_correction(transcript: str, current_order_items=None):
                 corr["original_spoken"] = dish if dish else "item"
                 
                 if dish:
+                    from classifier_service import fuzzy_match_dish
                     matched_dish, dish_score, is_ambiguous = fuzzy_match_dish(dish)
+
                     corr["dish"] = matched_dish if (dish_score >= 0.30 or is_ambiguous) else dish
                     corr["score"] = round(float(dish_score), 2)
                     if is_ambiguous: corr["score"] = 0.50 # Force confirmation
