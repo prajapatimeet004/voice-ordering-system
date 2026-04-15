@@ -56,6 +56,7 @@ ADDON_KEYWORD_MAP = {
     "rakhjo": "add",
     "rakhje": "add",
     "rakho": "add",
+    "nakhal": "add",
 
     # 🌶️ SPICE
     "tikhu": "spicy",
@@ -120,6 +121,13 @@ ADDON_KEYWORD_MAP = {
     # 🍋 LEMON
     "limbu": "lemon",
     "lemon": "lemon",
+
+    # 🥣 CHUTNEY
+    "chutney": "chutney",
+    "chutany": "chutney",
+    "chutni": "chutney",
+    "chatunry": "chutney",
+    "chatni": "chutney",
 
     # 🧀 PANEER
     "paneer": "paneer",
@@ -215,13 +223,49 @@ def extract_addons(transcript: str, fuzzy_threshold: int = 75) -> dict:
     addons_result = {}
     used_indices = set()
     
-    # Try pairing Modifier + Addon or Addon + Modifier (distance <= 2)
-    for i in range(len(identified)):
+    # Priority 1: Explicit Swaps (Instead of A, do B)
+    for i, curr in enumerate(identified):
+        if curr["category"] == "swap":
+            before = None
+            before_idx = -1
+            after = None
+            after_idx = -1
+            
+            # Find nearest category before 'swap'
+            for j in range(i - 1, -1, -1):
+                if not identified[j]["is_modifier"] and j not in used_indices:
+                    before = identified[j]
+                    before_idx = j
+                    break
+            
+            # Find nearest category after 'swap'
+            for j in range(i + 1, len(identified)):
+                if not identified[j]["is_modifier"] and j not in used_indices:
+                    after = identified[j]
+                    after_idx = j
+                    break
+            
+            if before and after:
+                # We found both! (e.g., "A instead B")
+                addons_result[before["category"]] = "swap"
+                addons_result[after["category"]] = "add"
+                used_indices.update({i, before_idx, after_idx})
+            elif after:
+                # Only something after (e.g., "instead of A")
+                # If there's an 'of' keyword, it's definitely the target. 
+                # Our current map doesn't have 'of', but we can assume 'after' is the target if swap is a prefix.
+                addons_result[after["category"]] = "swap" 
+                used_indices.update({i, after_idx})
+            elif before:
+                # Something before and swap at end (e.g., "no spicy instead")
+                addons_result[before["category"]] = "swap"
+                used_indices.update({i, before_idx})
+
+    # Priority 2: Standard Pairing (Modifier + Addon or Addon + Modifier)
+    for i, curr in enumerate(identified):
         if i in used_indices:
             continue
             
-        curr = identified[i]
-        
         # Look for a companion in the remaining identified tokens
         found_pair = False
         for j in range(i + 1, len(identified)):
@@ -229,20 +273,28 @@ def extract_addons(transcript: str, fuzzy_threshold: int = 75) -> dict:
                 continue
             
             other = identified[j]
-            # Check distance (increased for verbose Gujarati phrases)
-            max_dist = 6 if curr["category"] == "swap" or other["category"] == "swap" else 3
+            # Check distance
+            max_dist = 4 
             if abs(curr["index"] - other["index"]) <= max_dist:
                 # If one is modifier and other is addon
                 if curr["is_modifier"] != other["is_modifier"]:
                     modifier = curr["category"] if curr["is_modifier"] else other["category"]
                     addon = other["category"] if curr["is_modifier"] else curr["category"]
-                    addons_result[addon] = modifier
-                    used_indices.add(i)
-                    used_indices.add(j)
+                    
+                    # If this addon category already has a 'swap' or specific action, 
+                    # and the new one is just a generic 'remove', don't overwrite it.
+                    existing_action = addons_result.get(addon)
+                    is_new_specific = modifier in ["increase", "decrease"]
+                    is_old_generic = existing_action in ["remove", "remove_action", "swap"]
+                    
+                    if not existing_action or (is_new_specific and is_old_generic):
+                        addons_result[addon] = modifier
+                    
+                    used_indices.update({i, j})
                     found_pair = True
                     break
         
-        # Individual standalone addon
+        # Priority 3: Standalone addon (default to 'add')
         if not found_pair and i not in used_indices:
             if not curr["is_modifier"]:
                 addons_result[curr["category"]] = "add"
@@ -278,15 +330,28 @@ def merge_structured_addons(current_addons: list, new_addons_dict: dict) -> list
             # Also discard the category name itself if it was added directly
             final_addons.discard(category)
         
-        if action in ["increase", "add", "swap"]:
+        if action in ["increase", "decrease", "add", "swap"]:
             # For 'swap', we already removed the old one above. 
             # Now we add the category name as a new string (or we could use a default mapping)
             if action != "swap" or category not in category_to_string:
                 # Map categories back to a friendly name for display
                 display_name = category
                 # Special cases for better UI
-                friendly = {"spicy": "tikhi", "butter": "butter", "onion": "without onion", "sweet": "sweet"}
-                display_name = friendly.get(category, category)
+                friendly = {
+                    "spicy": "tikhu" if action != "decrease" else "ochhu tikhu", 
+                    "butter": "butter", 
+                    "onion": "without onion", 
+                    "sweet": "sweet",
+                    "cold": "cold" if action != "decrease" else "thodu thandu",
+                    "chutney": "chutney"
+                }
+                
+                # If it was a decrease, use a better name if not in friendly
+                if action == "decrease" and category not in friendly:
+                    display_name = f"less {category}"
+                else:
+                    display_name = friendly.get(category, category)
+                    
                 final_addons.add(display_name)
     
     return list(final_addons)
@@ -329,6 +394,10 @@ def run_tests():
         {
             "input": "butter na badle cheese nakho",
             "expected": {"addons": {"butter": "swap", "cheese": "add"}}
+        },
+        {
+            "input": "remove spicy ness and instead make it less spicy",
+            "expected": {"addons": {"spicy": "swap"}} # Swapping spicy category
         }
     ]
     

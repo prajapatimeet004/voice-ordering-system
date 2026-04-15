@@ -618,6 +618,12 @@ Users may freely mix languages.
 - If the user uses Hindi, respond in Hinglish/Hindi.
 - Match the `language_code` to the user's dominant language (e.g., `gu-IN` for Gujarati/Gujlish, `hi-IN` for Hindi/Hinglish).
 
+#### 🚫 STRICT STATE-AWARENESS RULE 🚫
+- **BEFORE MODIFYING ADDONS**, check the `Current Order Summary`.
+- **REMOVE/CANCEL**: If a user asks to "remove/cancel X", only output a modification if "X" is currently in the order. If it's not there, ignore the removal but acknowledge it politely.
+- **ADD vs UPDATE**: If the user says "more X" or "add X", check if it's already there. If yes, use `action: "update"` with `changes: {{"X": "increase"}}`. If no, use `action: "add"` or include it in `items`.
+- **CRITICAL**: If a user says "remove X" for an addon, YOU MUST find the corresponding dish in the current order and set its addon to "remove" (e.g., target_item: "Dosa", changes: {{"chutney": "remove"}}). NEVER use an addon name as the 'target_item'.
+
 AVAILABLE MENU:
 {', '.join(INDIAN_MENU)}
 
@@ -673,6 +679,7 @@ Extract modifications (addons) from user input.
 - Quantity changes: "extra", "double", "more", "vadhu", "zyada"
 - Reduction: "less", "light", "ocha", "kam"
 - Removal: "no", "without", "nahi", "vina"
+- **CRITICAL RULE**: If a user says "remove X" for an addon, YOU MUST find the corresponding dish in the current order and set its addon to "remove" (e.g., target_item: "Dosa", changes: {{"chutney": "remove"}}). NEVER use an addon as the 'target_item'.
 
 ---
 
@@ -746,23 +753,22 @@ Output: {{
   "language_code": "gu-IN"
 }}
 
-#### Case F: Multi-Turn Replacement (Single Transcript)
-Input: "Paneer Tikka ne kadhi nakho ane ena badle Chole Bhature"
-Current Order Summary: "1x Paneer Tikka"
+#### Case G: Addon Swap (Instead of X, use Y)
+Input: "Butter chicken ma teekha mat rakhna, uske badle thoda extra butter dal dena"
+Current Order Summary: "1x Butter Chicken"
 Output: {{
   "intent": "modify_order",
-  "items": [
-    {{ "name": "Chhole Bhature", "quantity": 1, "addons": {{}} }}
-  ],
+  "items": [],
   "modifications": [
-    {{ "target_item": "Paneer Tikka", "action": "remove", "changes": {{}} }}
+    {{
+      "target_item": "Butter Chicken",
+      "action": "update",
+      "changes": {{ "spicy": "remove", "butter": "increase" }}
+    }}
   ],
-  "response_text": "Theek hai, Paneer Tikka cancel kari ne Chole Bhature rakhu chu.",
-  "language_code": "gu-IN"
+  "response_text": "Theek hai, Butter Chicken spicy nahi rahega aur extra butter add kar diya hai.",
+  "language_code": "hi-IN"
 }}
-
-
-
 
 Goal: Act like a smart Indian waiter who understands any language mix, never misses customization, and handles corrections naturally.
 
@@ -857,7 +863,7 @@ Goal: Act like a smart Indian waiter who understands any language mix, never mis
                 "quantity": qty,
                 "portion": "full", # Portions not explicitly in new schema but can be part of dish name
                 "modified_addons": addons_dict, # Use the structured dict from LLM
-                "addons": [f"{k}: {v}" for k, v in addons_dict.items()] if isinstance(addons_dict, dict) else []
+                "addons": [f"{k}: {v}" for k, v in addons_dict.items() if v not in ["remove", "remove_action"]] if isinstance(addons_dict, dict) else []
             }
             final_order_result["items"].append(processed_item)
             

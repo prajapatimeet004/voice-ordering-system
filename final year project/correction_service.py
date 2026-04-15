@@ -286,8 +286,8 @@ CORRECTION_SCHEMA = {
                     "dish": {"type": "STRING", "description": "Dish being corrected, EXACTLY as spoken"},
                     "original_dish": {"type": "STRING", "description": "The dish being replaced (if any)"},
                     "new_dish": {"type": "STRING", "description": "The new dish (if replacing)"},
-                    "original_addon": {"type": "STRING", "description": "The addon being replaced (if any)"},
-                    "new_addon": {"type": "STRING", "description": "The new addon name (if replacing)"},
+                    "original_addon": {"type": "STRING", "description": "The exact addon name being replaced or removed (e.g., 'extra spicy', 'no cheese', 'vadhu butter')"},
+                    "new_addon": {"type": "STRING", "description": "The new addon description to set instead (e.g., 'less spicy', 'double cheese', 'thodu butter')"},
                     "quantity": {"type": "INTEGER", "description": "The quantity mentioned"},
                     "is_relative": {"type": "BOOLEAN", "description": "True if adding to current (add/extra)"},
                     "raw_addons": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "New customization phrases"},
@@ -359,6 +359,27 @@ def process_correction(transcript: str, current_order_items=None):
         {{ "action": "modify", "original_dish": "Paneer Tikka", "new_dish": "Mutton Rogan Josh", "dish": "Mutton Rogan Josh", "quantity": 1, "is_relative": false, "raw_addons": [], "correction_found": true }},
         {{ "action": "remove", "dish": "Chicken Tikka", "quantity": 1, "is_relative": false, "raw_addons": [], "correction_found": true }}
       ]
+    #### 🌶️ ADDON SWAP
+    Input: "Butter chicken ma teekhu nathi rakhvu, ena badle thodu butter rakhjo"
+    Output: {{
+      "correction_found": true,
+      "action": "modify",
+      "original_dish": "Butter Chicken",
+      "new_dish": "Butter Chicken",
+      "original_addon": "teekhu",
+      "new_addon": "thodu butter",
+      "quantity": 1
+    }}
+
+    #### 🔄 REPLACEMENT EXAMPLES
+    Input: "1 Masala Dosa hataavi do ane ena badle 2 Idli add karo"
+    Output: {{
+      "correction_found": true,
+      "action": "modify",
+      "original_dish": "Masala Dosa",
+      "new_dish": "Idli Sambhar",
+      "quantity": 2
+    }}
     - "biryani karo samosa ni badle" means: "Add biryani instead of samosa" ->
       [{{ "action": "modify", "original_dish": "samosa", "new_dish": "biryani", "dish": "biryani", "quantity": 1, "is_relative": false, "raw_addons": [], "correction_found": true }}]
     - "chai ki jagah coffee de do" means: "Give coffee instead of chai" ->

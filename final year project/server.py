@@ -15,6 +15,7 @@ from audio_utils import safe_remove
 from ordering_workflow import transcribe_audio
 from classifier_service import classify_order, INDIAN_MENU
 from correction_service import detect_correction, process_correction
+from addon_extractor import merge_structured_addons
 from tts_service import generate_speech
 import response_service
 import inventory_service
@@ -229,13 +230,11 @@ async def classify(transcript: str = Form(...), table_id: str = Form("default"))
                 
                 if sug_dish in current_order_state["confirmed"]:
                     current_order_state["confirmed"][sug_dish]["quantity"] += sug_qty
-                    from addon_extractor import merge_structured_addons
                     current_order_state["confirmed"][sug_dish]["addons"] = merge_structured_addons(
                         current_order_state["confirmed"][sug_dish]["addons"], 
                         {a: "add" for a in sug_addons} if isinstance(sug_addons, list) else sug_addons
                     )
                 else:
-                    from addon_extractor import merge_structured_addons
                     current_order_state["confirmed"][sug_dish] = {
                         "dish": sug_dish, 
                         "quantity": sug_qty, 
@@ -329,15 +328,17 @@ async def classify(transcript: str = Form(...), table_id: str = Form("default"))
                 elif action in ["update", "add"]:
                     # Update addons or quantity
                     existing = current_order_state["confirmed"][matched_target]
-                    for k, v in changes.items():
-                        if k == "quantity":
-                            existing["quantity"] = v
-                        else:
-                            # Update or add addon phrase
-                            addon_phrase = f"{k}: {v}"
-                            if addon_phrase not in existing["addons"]:
-                                existing["addons"].append(addon_phrase)
-                    print(f"DEBUG: Updated '{matched_target}' with {changes}")
+                    
+                    # Update quantity if present
+                    if "quantity" in changes:
+                        existing["quantity"] = int(changes.pop("quantity"))
+                    
+                    # Use merge_structured_addons for all other changes (which are assumed to be addons)
+                    if changes:
+                        current_addons = existing.get("addons", [])
+                        updated_addons = merge_structured_addons(current_addons, changes)
+                        existing["addons"] = updated_addons
+                        print(f"DEBUG: Updated '{matched_target}' addons: {updated_addons} (from changes: {changes})")
         
         # fallback is_finished
         if result.get("is_finished"):
