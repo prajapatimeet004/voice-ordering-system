@@ -253,6 +253,19 @@ async def classify(transcript: str = Form(...), table_id: str = Form("default"))
         # --- Item & Modification Processing ---
         items_msg = result.get("response_text", "")
         
+        # Build a set of dish names that are already targeted by modifications.
+        # This prevents adding a duplicate item when the user only wants to modify
+        # an existing dish (e.g. "make butter chicken more spicy" should NOT add
+        # another Butter Chicken, it should only update the addon).
+        from classifier_service import fuzzy_match_dish as _fmatch
+        modification_targets = set()
+        for mod in result.get("modifications", []):
+            t = mod.get("target_item", "")
+            if t:
+                matched_t, _, _ = _fmatch(t)
+                modification_targets.add(matched_t)
+                modification_targets.add(t)  # also keep raw in case fuzzy misses
+
         # 1. Process New Items (Only auto-confirm high-confidence matches)
         if result.get("items"):
             needs_conf_list = result.get("needs_confirmation", [])
@@ -263,6 +276,12 @@ async def classify(transcript: str = Form(...), table_id: str = Form("default"))
                 qty = item.get("quantity", 1)
                 addons = item.get("addons", [])
                 
+                # SKIP if this dish is already being handled by a modification entry
+                # (e.g. "make butter chicken more spicy" – no new item should be added)
+                if dish_name in modification_targets:
+                    print(f"DEBUG: Skipping auto-add for '{dish_name}' (already a modification target)")
+                    continue
+
                 # SKIP auto-adding if this item is in the "needs_confirmation" list
                 if any(nc["suggested"] == dish_name for nc in needs_conf_list):
                     print(f"DEBUG: Skipping auto-add for '{dish_name}' (needs confirmation)")
