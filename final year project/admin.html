@@ -1,306 +1,134 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kitchen Display System — Pooja Restaurant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        outfit: ['Outfit', 'sans-serif'],
+                        inter: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eef2ff', 100: '#e0e7ff',
+                            500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
+                        },
+                        surface: {
+                            900: '#060b14',
+                            800: '#0d1626',
+                            700: '#111d30',
+                            600: '#162035',
+                        }
+                    },
+                    animation: {
+                        'pulse-dot': 'pulseDot 2s infinite',
+                        'slide-in': 'slideIn 0.35s cubic-bezier(0.34,1.56,0.64,1)',
+                        'blink': 'blink 1s step-end infinite',
+                        'spin-once': 'spin 0.6s linear',
+                    },
+                    keyframes: {
+                        pulseDot: {
+                            '0%,100%': { boxShadow: '0 0 0 0 rgba(16,185,129,0.5)' },
+                            '70%': { boxShadow: '0 0 0 10px rgba(16,185,129,0)' },
+                        },
+                        slideIn: {
+                            from: { opacity: 0, transform: 'translateY(16px) scale(0.97)' },
+                            to: { opacity: 1, transform: 'none' },
+                        },
+                        blink: { '50%': { opacity: 0.3 } },
+                    },
+                    backdropBlur: { xl: '20px' },
+                }
+            }
+        }
+    </script>
     <link
         href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;900&family=Inter:wght@400;500;600;700;800&display=swap"
         rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        :root {
-            --bg: #060b14;
-            --surface: #0d1626;
-            --surface2: #111d30;
-            --border: rgba(255, 255, 255, 0.07);
-            --border2: rgba(255, 255, 255, 0.12);
-            --primary: #6366f1;
-            --primary-g: linear-gradient(135deg, #6366f1, #8b5cf6);
-            --green: #10b981;
-            --amber: #f59e0b;
-            --red: #ef4444;
-            --text: #f1f5f9;
-            --muted: #64748b;
-            --glow: 0 0 30px rgba(99, 102, 241, 0.18);
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box
-        }
-
         body {
             font-family: 'Inter', sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
         }
 
-        /* ── TOP BAR ── */
-        .topbar {
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            background: rgba(6, 11, 20, 0.85);
-            backdrop-filter: blur(20px);
-            border-bottom: 1px solid var(--border);
-            padding: 0 2.5rem;
-            height: 68px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
-        }
-
-        .brand {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-
-        .brand-icon {
-            width: 38px;
-            height: 38px;
-            border-radius: 12px;
-            background: var(--primary-g);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: var(--glow);
-        }
-
-        .brand-name {
+        .font-outfit {
             font-family: 'Outfit', sans-serif;
-            font-weight: 900;
-            font-size: 1.4rem;
+        }
+
+        /* Gradient text */
+        .text-gradient {
             background: linear-gradient(to right, #fff, #94a3b8);
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
-            letter-spacing: -0.5px;
         }
 
-        .brand-sub {
-            font-size: 0.75rem;
-            color: var(--muted);
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            font-weight: 600;
+        .text-gradient-brand {
+            background: linear-gradient(135deg, #818cf8, #c084fc);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
 
-        .topbar-center {
-            display: flex;
-            align-items: center;
-            gap: 2rem;
-            font-size: 0.85rem;
-            color: var(--muted);
+        /* Card status top border */
+        .card-new {
+            border-top: 3px solid #f59e0b;
         }
 
-        .live-badge {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            background: rgba(16, 185, 129, 0.1);
-            border: 1px solid rgba(16, 185, 129, 0.25);
-            color: var(--green);
-            padding: 0.4rem 1rem;
-            border-radius: 100px;
-            font-weight: 700;
-            font-size: 0.8rem;
-            letter-spacing: 1px;
+        .card-prep {
+            border-top: 3px solid #6366f1;
         }
 
-        .pulse {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--green);
-            box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
-            animation: pulse 2s infinite;
+        .card-ready {
+            border-top: 3px solid #10b981;
         }
 
-        @keyframes pulse {
-            0% {
-                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5);
-            }
-
-            70% {
-                box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
-            }
-
-            100% {
-                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
-            }
+        .card-urgent {
+            border-color: #ef4444 !important;
+            box-shadow: 0 0 0 1px #ef4444, 0 20px 60px rgba(239, 68, 68, 0.15) !important;
         }
 
-        .topbar-right {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
+        /* Checked item */
+        .item-checked {
+            opacity: 0.4;
         }
 
-        .btn-icon {
-            width: 38px;
-            height: 38px;
-            border-radius: 10px;
-            border: 1px solid var(--border2);
-            background: var(--surface);
-            color: var(--muted);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: 0.2s;
+        .item-checked .item-name {
+            text-decoration: line-through;
         }
 
-        .btn-icon:hover {
-            color: #fff;
-            border-color: var(--primary);
+        /* glow effects */
+        .glow-brand {
+            box-shadow: 0 0 30px rgba(99, 102, 241, 0.25);
         }
 
-        #clock-display {
-            font-family: 'Outfit', sans-serif;
-            font-weight: 700;
-            font-size: 1rem;
-            color: var(--text);
-            letter-spacing: 1px;
-            min-width: 90px;
-            text-align: right;
+        .glow-green {
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.25);
         }
 
-        /* ── STATS BAR ── */
-        .stats-bar {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 1px;
-            background: var(--border);
-            border-bottom: 1px solid var(--border);
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
         }
 
-        .stat-box {
-            background: var(--surface);
-            padding: 1.4rem 2rem;
-            display: flex;
-            align-items: center;
-            gap: 1.2rem;
-            transition: 0.2s;
+        ::-webkit-scrollbar-track {
+            background: #060b14;
         }
 
-        .stat-box:hover {
-            background: var(--surface2);
+        ::-webkit-scrollbar-thumb {
+            background: #1e2d45;
+            border-radius: 6px;
         }
 
-        .stat-icon {
-            width: 44px;
-            height: 44px;
-            border-radius: 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-        }
-
-        .stat-icon.indigo {
-            background: rgba(99, 102, 241, 0.15);
-            color: #818cf8;
-        }
-
-        .stat-icon.green {
-            background: rgba(16, 185, 129, 0.15);
-            color: var(--green);
-        }
-
-        .stat-icon.amber {
-            background: rgba(245, 158, 11, 0.15);
-            color: var(--amber);
-        }
-
-        .stat-icon.red {
-            background: rgba(239, 68, 68, 0.15);
-            color: var(--red);
-        }
-
-        .stat-info {
-            flex: 1;
-        }
-
-        .stat-label {
-            font-size: 0.72rem;
-            color: var(--muted);
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            font-weight: 700;
-        }
-
-        .stat-value {
-            font-family: 'Outfit', sans-serif;
-            font-size: 2rem;
-            font-weight: 900;
-            color: #fff;
-            line-height: 1.1;
-            margin-top: 2px;
-        }
-
-        /* ── FILTER TABS ── */
-        .filter-bar {
-            padding: 1.25rem 2.5rem;
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-
-        .filter-tab {
-            padding: 0.5rem 1.25rem;
-            border-radius: 100px;
-            border: 1px solid var(--border2);
-            background: transparent;
-            color: var(--muted);
-            font-size: 0.8rem;
-            font-weight: 700;
-            cursor: pointer;
-            transition: 0.2s;
-            letter-spacing: 0.5px;
-        }
-
-        .filter-tab:hover,
-        .filter-tab.active {
-            background: var(--primary);
-            border-color: var(--primary);
-            color: #fff;
-        }
-
-        .filter-count {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            background: rgba(255, 255, 255, 0.12);
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            font-size: 0.65rem;
-            margin-left: 0.4rem;
-        }
-
-        /* ── ORDER GRID ── */
-        .kds-grid {
-            padding: 0 2.5rem 2.5rem;
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-            gap: 1.5rem;
-        }
-
-        /* ── ORDER CARD ── */
+        /* Animate in */
         .order-card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 20px;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            transition: border-color 0.3s, box-shadow 0.3s;
             animation: slideIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
@@ -316,472 +144,220 @@
             }
         }
 
-        .order-card:hover {
-            border-color: var(--border2);
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
-        }
-
-        .order-card.status-new {
-            border-top: 3px solid var(--amber);
-        }
-
-        .order-card.status-prep {
-            border-top: 3px solid var(--primary);
-        }
-
-        .order-card.status-ready {
-            border-top: 3px solid var(--green);
-        }
-
-        .order-card.urgent {
-            border-color: var(--red) !important;
-            box-shadow: 0 0 0 1px var(--red), 0 20px 60px rgba(239, 68, 68, 0.15);
-        }
-
-        /* card header */
-        .card-head {
-            padding: 1.25rem 1.5rem 1rem;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .table-id {
-            font-family: 'Outfit', sans-serif;
-            font-weight: 900;
-            font-size: 1.4rem;
-            color: #fff;
-        }
-
-        .table-sub {
-            font-size: 0.75rem;
-            color: var(--muted);
-            margin-top: 1px;
-        }
-
-        .card-badges {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .badge {
-            padding: 0.3rem 0.75rem;
-            border-radius: 8px;
-            font-size: 0.7rem;
-            font-weight: 800;
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-        }
-
-        .badge-new {
-            background: rgba(245, 158, 11, 0.15);
-            color: var(--amber);
-            border: 1px solid rgba(245, 158, 11, 0.25);
-        }
-
-        .badge-prep {
-            background: rgba(99, 102, 241, 0.15);
-            color: #818cf8;
-            border: 1px solid rgba(99, 102, 241, 0.25);
-        }
-
-        .badge-ready {
-            background: rgba(16, 185, 129, 0.15);
-            color: var(--green);
-            border: 1px solid rgba(16, 185, 129, 0.25);
-        }
-
-        .badge-urgent {
-            background: rgba(239, 68, 68, 0.15);
-            color: var(--red);
-            border: 1px solid rgba(239, 68, 68, 0.25);
-        }
-
-        /* timer */
-        .timer {
-            display: flex;
-            align-items: center;
-            gap: 0.4rem;
-            font-family: 'Outfit', sans-serif;
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: var(--green);
-        }
-
-        .timer.warn {
-            color: var(--amber);
-        }
-
-        .timer.alert {
-            color: var(--red);
+        /* Timer blink */
+        .timer-alert {
             animation: blink 1s step-end infinite;
         }
 
         @keyframes blink {
             50% {
-                opacity: 0.4;
+                opacity: 0.3;
             }
         }
 
-        /* item list */
-        .item-list {
-            padding: 1rem 1.5rem;
-            flex: 1;
+        /* Pulse dot */
+        .pulse-dot {
+            box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5);
+            animation: pulseDot 2s infinite;
         }
 
-        .item-row {
-            display: flex;
-            align-items: flex-start;
-            gap: 0.85rem;
-            padding: 0.85rem 1rem;
-            border-radius: 12px;
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid transparent;
-            margin-bottom: 0.6rem;
-            transition: 0.2s;
-        }
+        @keyframes pulseDot {
 
-        .item-row:hover {
-            background: rgba(255, 255, 255, 0.05);
-            border-color: var(--border);
-        }
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5);
+            }
 
-        .item-row:last-child {
-            margin-bottom: 0;
-        }
-
-        .qty-pill {
-            min-width: 32px;
-            height: 32px;
-            border-radius: 9px;
-            background: var(--primary-g);
-            color: #fff;
-            font-weight: 800;
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-        }
-
-        .item-info {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .item-name {
-            font-weight: 700;
-            font-size: 0.95rem;
-            color: #fff;
-        }
-
-        .item-addons {
-            font-size: 0.78rem;
-            color: var(--muted);
-            margin-top: 3px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.35rem;
-        }
-
-        .addon-tag {
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid var(--border);
-            padding: 0.15rem 0.5rem;
-            border-radius: 6px;
-            font-size: 0.7rem;
-        }
-
-        .item-check {
-            width: 22px;
-            height: 22px;
-            border-radius: 7px;
-            border: 1.5px solid var(--border2);
-            cursor: pointer;
-            flex-shrink: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: 0.2s;
-            margin-top: 4px;
-        }
-
-        .item-check.checked {
-            background: var(--green);
-            border-color: var(--green);
-        }
-
-        .item-check.checked::after {
-            content: '✓';
-            color: #fff;
-            font-size: 0.7rem;
-            font-weight: 900;
-        }
-
-        /* card footer */
-        .card-foot {
-            padding: 1rem 1.5rem;
-            border-top: 1px solid var(--border);
-            display: flex;
-            gap: 0.75rem;
-        }
-
-        .btn {
-            flex: 1;
-            padding: 0.75rem;
-            border-radius: 12px;
-            border: none;
-            font-weight: 800;
-            font-size: 0.85rem;
-            cursor: pointer;
-            transition: 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-        }
-
-        .btn-primary {
-            background: var(--primary-g);
-            color: #fff;
-        }
-
-        .btn-primary:hover {
-            opacity: 0.85;
-            transform: translateY(-1px);
-        }
-
-        .btn-success {
-            background: rgba(16, 185, 129, 0.15);
-            color: var(--green);
-            border: 1px solid rgba(16, 185, 129, 0.3);
-        }
-
-        .btn-success:hover {
-            background: var(--green);
-            color: #fff;
-        }
-
-        .btn-ghost {
-            background: var(--surface2);
-            color: var(--muted);
-            border: 1px solid var(--border);
-        }
-
-        .btn-ghost:hover {
-            color: #fff;
-            border-color: var(--border2);
-        }
-
-        /* ── EMPTY STATE ── */
-        .empty-state {
-            grid-column: 1 / -1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 6rem 2rem;
-            gap: 1.5rem;
-            color: var(--muted);
-        }
-
-        .empty-icon {
-            width: 72px;
-            height: 72px;
-            border-radius: 24px;
-            background: var(--surface2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .empty-state h3 {
-            font-size: 1.2rem;
-            color: #fff;
-            font-weight: 700;
-        }
-
-        .empty-state p {
-            font-size: 0.9rem;
-            text-align: center;
-            max-width: 300px;
-        }
-
-        /* ── NOTIFICATION TOAST ── */
-        #toast {
-            position: fixed;
-            bottom: 2rem;
-            right: 2rem;
-            background: var(--surface2);
-            border: 1px solid var(--border2);
-            border-left: 4px solid var(--green);
-            border-radius: 14px;
-            padding: 1rem 1.5rem;
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            font-weight: 700;
-            font-size: 0.9rem;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-            transform: translateY(100px);
-            opacity: 0;
-            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-            z-index: 999;
-        }
-
-        #toast.show {
-            transform: none;
-            opacity: 1;
-        }
-
-        #toast-icon {
-            color: var(--green);
+            70% {
+                box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+            }
         }
     </style>
 </head>
 
-<body>
+<body class="bg-[#060b14] text-slate-100 min-h-screen antialiased">
 
-    <!-- ── TOP BAR ── -->
-    <header class="topbar">
-        <div class="brand">
-            <div class="brand-icon">
-                <i data-lucide="utensils" style="width:18px;color:#fff"></i>
-            </div>
-            <div>
-                <div class="brand-name">Pooja Kitchen</div>
-                <div class="brand-sub">Display System</div>
-            </div>
-        </div>
+    <!-- ═══════════════════════ TOP BAR ═══════════════════════ -->
+    <header class="sticky top-0 z-50 border-b border-white/[0.07] bg-[#060b14]/80 backdrop-blur-xl">
+        <div class="mx-auto max-w-screen-2xl px-6 h-16 flex items-center justify-between gap-4">
 
-        <div class="topbar-center">
-            <div class="live-badge">
-                <div class="pulse"></div>
-                LIVE
+            <!-- Brand -->
+            <div class="flex items-center gap-3">
+                <div
+                    class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center glow-brand flex-shrink-0">
+                    <i data-lucide="utensils" class="w-4 text-white"></i>
+                </div>
+                <div class="leading-tight">
+                    <div class="font-outfit font-black text-xl text-gradient tracking-tight">Pooja Kitchen</div>
+                    <div class="text-[10px] text-slate-500 uppercase tracking-[2px] font-bold">Display System</div>
+                </div>
             </div>
-            <span id="clock-display"></span>
-        </div>
 
-        <div class="topbar-right">
-            <div class="btn-icon" onclick="toggleSound()" id="sound-btn" title="Toggle Alerts">
-                <i data-lucide="volume-2" style="width:16px"></i>
+            <!-- Center -->
+            <div class="flex items-center gap-4">
+                <div
+                    class="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 px-3 py-1.5 rounded-full text-xs font-bold tracking-wider">
+                    <div class="w-2 h-2 rounded-full bg-emerald-500 pulse-dot"></div>
+                    LIVE
+                </div>
+                <div id="clock-display"
+                    class="font-outfit font-bold text-slate-200 text-sm tabular-nums min-w-[90px] text-right"></div>
             </div>
-            <div class="btn-icon" onclick="forceRefresh()" title="Refresh">
-                <i data-lucide="refresh-cw" style="width:16px" id="refresh-icon"></i>
+
+            <!-- Actions -->
+            <div class="flex items-center gap-2">
+                <button onclick="toggleSound()" id="sound-btn"
+                    class="w-9 h-9 rounded-xl border border-white/10 bg-surface-800 text-slate-400 hover:text-white hover:border-indigo-500 flex items-center justify-center transition-all">
+                    <i data-lucide="volume-2" class="w-4" id="sound-icon"></i>
+                </button>
+                <button onclick="forceRefresh()"
+                    class="w-9 h-9 rounded-xl border border-white/10 bg-surface-800 text-slate-400 hover:text-white hover:border-indigo-500 flex items-center justify-center transition-all">
+                    <i data-lucide="refresh-cw" class="w-4" id="refresh-icon"></i>
+                </button>
             </div>
         </div>
     </header>
 
-    <!-- ── STATS BAR ── -->
-    <div class="stats-bar">
-        <div class="stat-box">
-            <div class="stat-icon indigo"><i data-lucide="layout-grid" style="width:20px"></i></div>
-            <div class="stat-info">
-                <div class="stat-label">Active Tables</div>
-                <div class="stat-value" id="stat-tables">0</div>
+    <!-- ═══════════════════════ STATS BAR ═══════════════════════ -->
+    <div class="grid grid-cols-4 border-b border-white/[0.07] divide-x divide-white/[0.07]">
+
+        <div class="bg-[#0d1626] px-6 py-4 flex items-center gap-4 hover:bg-[#111d30] transition-colors group">
+            <div
+                class="w-11 h-11 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400 group-hover:bg-indigo-500/20 transition-colors">
+                <i data-lucide="layout-grid" class="w-5"></i>
+            </div>
+            <div>
+                <div class="text-[10px] text-slate-500 uppercase tracking-[1.5px] font-bold">Active Tables</div>
+                <div class="font-outfit font-black text-3xl text-white leading-none mt-0.5" id="stat-tables">0</div>
             </div>
         </div>
-        <div class="stat-box">
-            <div class="stat-icon amber"><i data-lucide="clock" style="width:20px"></i></div>
-            <div class="stat-info">
-                <div class="stat-label">Pending Orders</div>
-                <div class="stat-value" id="stat-pending">0</div>
+
+        <div class="bg-[#0d1626] px-6 py-4 flex items-center gap-4 hover:bg-[#111d30] transition-colors group">
+            <div
+                class="w-11 h-11 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-400 group-hover:bg-amber-500/20 transition-colors">
+                <i data-lucide="clock" class="w-5"></i>
+            </div>
+            <div>
+                <div class="text-[10px] text-slate-500 uppercase tracking-[1.5px] font-bold">Pending Items</div>
+                <div class="font-outfit font-black text-3xl text-white leading-none mt-0.5" id="stat-pending">0</div>
             </div>
         </div>
-        <div class="stat-box">
-            <div class="stat-icon green"><i data-lucide="check-circle-2" style="width:20px"></i></div>
-            <div class="stat-info">
-                <div class="stat-label">Items Today</div>
-                <div class="stat-value" id="stat-items">0</div>
+
+        <div class="bg-[#0d1626] px-6 py-4 flex items-center gap-4 hover:bg-[#111d30] transition-colors group">
+            <div
+                class="w-11 h-11 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-500/20 transition-colors">
+                <i data-lucide="check-circle-2" class="w-5"></i>
+            </div>
+            <div>
+                <div class="text-[10px] text-slate-500 uppercase tracking-[1.5px] font-bold">Items Today</div>
+                <div class="font-outfit font-black text-3xl text-white leading-none mt-0.5" id="stat-items">0</div>
             </div>
         </div>
-        <div class="stat-box">
-            <div class="stat-icon red"><i data-lucide="indian-rupee" style="width:20px"></i></div>
-            <div class="stat-info">
-                <div class="stat-label">Revenue</div>
-                <div class="stat-value" id="stat-revenue">₹0</div>
+
+        <div class="bg-[#0d1626] px-6 py-4 flex items-center gap-4 hover:bg-[#111d30] transition-colors group">
+            <div
+                class="w-11 h-11 rounded-2xl bg-rose-500/10 flex items-center justify-center text-rose-400 group-hover:bg-rose-500/20 transition-colors">
+                <i data-lucide="indian-rupee" class="w-5"></i>
+            </div>
+            <div>
+                <div class="text-[10px] text-slate-500 uppercase tracking-[1.5px] font-bold">Revenue</div>
+                <div class="font-outfit font-black text-3xl text-white leading-none mt-0.5" id="stat-revenue">₹0</div>
             </div>
         </div>
     </div>
 
-    <!-- ── FILTER BAR ── -->
-    <div class="filter-bar">
-        <button class="filter-tab active" onclick="setFilter('all',this)">All Orders</button>
-        <button class="filter-tab" onclick="setFilter('new',this)">🔴 New <span class="filter-count"
-                id="cnt-new">0</span></button>
-        <button class="filter-tab" onclick="setFilter('prep',this)">🟡 Preparing <span class="filter-count"
-                id="cnt-prep">0</span></button>
-        <button class="filter-tab" onclick="setFilter('ready',this)">🟢 Ready <span class="filter-count"
-                id="cnt-ready">0</span></button>
+    <!-- ═══════════════════════ FILTER BAR ═══════════════════════ -->
+    <div class="mx-auto max-w-screen-2xl px-6 py-3 flex items-center gap-2">
+        <button
+            class="filter-tab active px-4 py-1.5 rounded-full border border-white/10 bg-transparent text-slate-400 text-xs font-bold tracking-wide cursor-pointer transition-all hover:text-white"
+            onclick="setFilter('all',this)">All Orders</button>
+        <button
+            class="filter-tab px-4 py-1.5 rounded-full border border-white/10 bg-transparent text-slate-400 text-xs font-bold tracking-wide cursor-pointer transition-all hover:text-white"
+            onclick="setFilter('new',this)">🔴 New <span id="cnt-new"
+                class="ml-1 inline-flex items-center justify-center bg-white/10 w-5 h-5 rounded-full text-[10px]">0</span></button>
+        <button
+            class="filter-tab px-4 py-1.5 rounded-full border border-white/10 bg-transparent text-slate-400 text-xs font-bold tracking-wide cursor-pointer transition-all hover:text-white"
+            onclick="setFilter('prep',this)">🟡 Preparing <span id="cnt-prep"
+                class="ml-1 inline-flex items-center justify-center bg-white/10 w-5 h-5 rounded-full text-[10px]">0</span></button>
+        <button
+            class="filter-tab px-4 py-1.5 rounded-full border border-white/10 bg-transparent text-slate-400 text-xs font-bold tracking-wide cursor-pointer transition-all hover:text-white"
+            onclick="setFilter('ready',this)">🟢 Ready <span id="cnt-ready"
+                class="ml-1 inline-flex items-center justify-center bg-white/10 w-5 h-5 rounded-full text-[10px]">0</span></button>
     </div>
 
-    <!-- ── KDS GRID ── -->
-    <main class="kds-grid" id="kds-grid"></main>
+    <style>
+        .filter-tab.active {
+            background: #6366f1;
+            border-color: #6366f1;
+            color: #fff;
+        }
+    </style>
 
-    <!-- ── TOAST ── -->
-    <div id="toast">
-        <i data-lucide="bell" id="toast-icon" style="width:18px"></i>
+    <!-- ═══════════════════════ KDS GRID ═══════════════════════ -->
+    <main id="kds-grid"
+        class="mx-auto max-w-screen-2xl px-6 pb-10 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
+    </main>
+
+    <!-- ═══════════════════════ TOAST ═══════════════════════ -->
+    <div id="toast"
+        class="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-[#111d30] border border-white/10 border-l-4 rounded-2xl px-5 py-3.5 font-bold text-sm shadow-2xl translate-y-24 opacity-0 transition-all duration-500">
+        <i data-lucide="bell" class="w-4 text-emerald-400" id="toast-icon"></i>
         <span id="toast-msg">New order received!</span>
     </div>
 
     <script>
         const API = window.location.origin.startsWith('file') ? 'http://127.0.0.1:8000' : window.location.origin;
 
-        // ── STATE ──
-        let orderStatuses = {};    // tableId → 'new' | 'prep' | 'ready'
-        let orderTimestamps = {};  // tableId → Date
-        let checkedItems = {};     // tableId → Set(itemKey)
+        let orderStatuses = {};
+        let orderTimestamps = {};
+        let checkedItems = {};
         let prevOrderKeys = new Set();
         let currentFilter = 'all';
         let soundEnabled = true;
         let itemsServedTotal = 0;
 
-        // ── CLOCK ──
+        // ── CLOCK
         function updateClock() {
-            const d = new Date();
             document.getElementById('clock-display').textContent =
-                d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+                new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
         }
         setInterval(updateClock, 1000); updateClock();
 
-        // ── SOUND ──
+        // ── SOUND
         function playBeep() {
             if (!soundEnabled) return;
             try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                [0, 0.12, 0.24].forEach(t => {
-                    const o = ctx.createOscillator();
-                    const g = ctx.createGain();
+                [0, 0.13, 0.26].forEach(t => {
+                    const o = ctx.createOscillator(), g = ctx.createGain();
                     o.connect(g); g.connect(ctx.destination);
                     o.frequency.value = 880;
                     g.gain.setValueAtTime(0, ctx.currentTime + t);
                     g.gain.linearRampToValueAtTime(0.3, ctx.currentTime + t + 0.02);
                     g.gain.linearRampToValueAtTime(0, ctx.currentTime + t + 0.12);
-                    o.start(ctx.currentTime + t);
-                    o.stop(ctx.currentTime + t + 0.13);
+                    o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.13);
                 });
             } catch (e) { }
         }
 
         function toggleSound() {
             soundEnabled = !soundEnabled;
-            const btn = document.getElementById('sound-btn');
-            btn.querySelector('i').setAttribute('data-lucide', soundEnabled ? 'volume-2' : 'volume-x');
+            const icon = document.getElementById('sound-icon');
+            icon.setAttribute('data-lucide', soundEnabled ? 'volume-2' : 'volume-x');
             lucide.createIcons();
         }
 
-        // ── TOAST ──
-        function showToast(msg, color = 'var(--green)') {
+        // ── TOAST
+        function showToast(msg, borderColor = '#10b981') {
             const t = document.getElementById('toast');
             document.getElementById('toast-msg').textContent = msg;
-            t.style.borderLeftColor = color;
-            t.classList.add('show');
-            setTimeout(() => t.classList.remove('show'), 3500);
+            t.style.borderLeftColor = borderColor;
+            t.classList.remove('translate-y-24', 'opacity-0');
+            t.classList.add('translate-y-0', 'opacity-100');
+            setTimeout(() => { t.classList.add('translate-y-24', 'opacity-0'); t.classList.remove('translate-y-0', 'opacity-100'); }, 3500);
         }
 
-        // ── FILTER ──
+        // ── FILTER
         function setFilter(f, el) {
             currentFilter = f;
             document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
@@ -789,101 +365,87 @@
             renderGrid(window._lastStates || {});
         }
 
-        // ── TIMER ──
-        function getElapsed(tableId) {
-            const ts = orderTimestamps[tableId];
-            if (!ts) return 0;
-            return Math.floor((Date.now() - ts) / 1000);
+        // ── TIMER
+        function getElapsed(id) {
+            const ts = orderTimestamps[id];
+            return ts ? Math.floor((Date.now() - ts) / 1000) : 0;
         }
-
         function fmtTime(s) {
-            const m = Math.floor(s / 60), sec = s % 60;
-            return `${m}:${sec.toString().padStart(2, '0')}`;
+            return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
         }
 
-        function timerClass(s) {
-            if (s > 600) return 'alert';   // >10 min
-            if (s > 300) return 'warn';    // >5  min
-            return '';
-        }
-
-        // ── FETCH ──
+        // ── FETCH
         async function fetchAll() {
             try {
-                const [statsRes, ordersRes] = await Promise.all([
+                const [sr, or] = await Promise.all([
                     fetch(`${API}/dashboard/stats`),
                     fetch(`${API}/order/all_states`)
                 ]);
-                const stats = await statsRes.json();
-                const states = await ordersRes.json();
+                const stats = await sr.json();
+                const states = await or.json();
 
-                // Stats
                 document.getElementById('stat-tables').textContent = stats.total_tables_active || 0;
                 document.getElementById('stat-pending').textContent = stats.active_orders || 0;
                 document.getElementById('stat-revenue').textContent = '₹' + (stats.revenue || 0);
 
-                // Detect new orders → beep + toast
-                const currentKeys = new Set(Object.keys(states).filter(k => Object.keys(states[k].confirmed || {}).length));
-                for (const k of currentKeys) {
+                const cur = new Set(Object.keys(states).filter(k => Object.keys(states[k].confirmed || {}).length));
+                for (const k of cur) {
                     if (!prevOrderKeys.has(k)) {
-                        // New table appeared
                         orderStatuses[k] = orderStatuses[k] || 'new';
-                        orderTimestamps[k] = orderTimestamps[k] || new Date();
+                        orderTimestamps[k] = orderTimestamps[k] || Date.now();
                         checkedItems[k] = checkedItems[k] || new Set();
                         playBeep();
-                        showToast(`🔔 New order — Table ${k}`);
+                        showToast(`🔔 New order — Table ${k.replace('table_', '')}`);
                     }
                 }
-                // Remove disappeared tables
                 for (const k of prevOrderKeys) {
-                    if (!currentKeys.has(k)) {
+                    if (!cur.has(k)) {
                         delete orderStatuses[k];
                         delete orderTimestamps[k];
                         delete checkedItems[k];
                     }
                 }
-                prevOrderKeys = currentKeys;
+                prevOrderKeys = cur;
 
-                // Count filters
-                let cntNew = 0, cntPrep = 0, cntReady = 0, totalItems = 0;
-                for (const k of currentKeys) {
+                let cntNew = 0, cntPrep = 0, cntReady = 0, totItems = 0;
+                for (const k of cur) {
                     const st = orderStatuses[k] || 'new';
                     if (st === 'new') cntNew++;
                     if (st === 'prep') cntPrep++;
                     if (st === 'ready') cntReady++;
-                    totalItems += Object.keys(states[k].confirmed || {}).length;
+                    totItems += Object.keys(states[k].confirmed || {}).length;
                 }
                 document.getElementById('cnt-new').textContent = cntNew;
                 document.getElementById('cnt-prep').textContent = cntPrep;
                 document.getElementById('cnt-ready').textContent = cntReady;
-                document.getElementById('stat-items').textContent = totalItems + itemsServedTotal;
+                document.getElementById('stat-items').textContent = totItems + itemsServedTotal;
 
                 window._lastStates = states;
                 renderGrid(states);
-            } catch (e) { /* server offline */ }
+            } catch (e) { }
         }
 
-        // ── RENDER ──
+        // ── RENDER
         function renderGrid(allStates) {
             const grid = document.getElementById('kds-grid');
-            const activeTables = Object.entries(allStates).filter(([, s]) => Object.keys(s.confirmed || {}).length > 0);
-
-            // Filter
-            const filtered = activeTables.filter(([k]) => {
+            const active = Object.entries(allStates).filter(([, s]) => Object.keys(s.confirmed || {}).length > 0);
+            const filtered = active.filter(([k]) => {
                 if (currentFilter === 'all') return true;
-                const st = orderStatuses[k] || 'new';
-                return st === currentFilter || (currentFilter === 'prep' && st === 'prep');
+                return (orderStatuses[k] || 'new') === currentFilter;
             });
 
-            if (filtered.length === 0) {
+            if (!filtered.length) {
                 grid.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-icon"><i data-lucide="chef-hat" style="width:30px;color:#475569"></i></div>
-                <h3>All Clear!</h3>
-                <p>No active orders right now. The kitchen is ready for the next wave.</p>
+            <div class="col-span-full flex flex-col items-center justify-center py-32 gap-4 text-slate-500">
+                <div class="w-20 h-20 rounded-3xl bg-[#0d1626] flex items-center justify-center">
+                    <i data-lucide="chef-hat" class="w-9 h-9 text-slate-600"></i>
+                </div>
+                <div class="text-center">
+                    <h3 class="text-white font-bold text-lg">All Clear!</h3>
+                    <p class="text-sm mt-1 max-w-xs">No active orders right now. Kitchen is ready.</p>
+                </div>
             </div>`;
-                lucide.createIcons();
-                return;
+                lucide.createIcons(); return;
             }
 
             // Sort: urgent first, then by age
@@ -894,80 +456,99 @@
                 return getElapsed(b) - getElapsed(a);
             });
 
-            grid.innerHTML = filtered.map(([tableId, state]) => buildCard(tableId, state.confirmed)).join('');
+            grid.innerHTML = filtered.map(([tid, state]) => buildCard(tid, state.confirmed)).join('');
             lucide.createIcons();
         }
 
         function buildCard(tableId, confirmed) {
             const status = orderStatuses[tableId] || 'new';
             const elapsed = getElapsed(tableId);
-            const isUrgent = elapsed > 600;
+            const urgent = elapsed > 600;
             const checked = checkedItems[tableId] || new Set();
             const items = Object.entries(confirmed);
-            const allDone = items.every(([k]) => checked.has(k));
+            const tNum = tableId.replace('table_', '');
 
-            const badgeMap = {
-                new: `<span class="badge badge-new">New Order</span>`,
-                prep: `<span class="badge badge-prep">Preparing</span>`,
-                ready: `<span class="badge badge-ready">Ready!</span>`,
+            const statusBanner = {
+                new: `<span class="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-black uppercase tracking-wider">New Order</span>`,
+                prep: `<span class="px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[10px] font-black uppercase tracking-wider">Preparing</span>`,
+                ready: `<span class="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-black uppercase tracking-wider">Ready!</span>`,
             };
+
+            const timerColor = elapsed > 600 ? 'text-rose-400 timer-alert' : elapsed > 300 ? 'text-amber-400' : 'text-emerald-400';
+            const timerEmoji = elapsed > 600 ? '⚠️' : '⏱';
 
             const itemsHtml = items.map(([key, det]) => {
                 const qty = det.quantity || 1;
                 const addons = Array.isArray(det.addons)
                     ? det.addons.filter(Boolean)
                     : typeof det.addons === 'object' ? Object.entries(det.addons || {}).map(([k, v]) => `${k}: ${v}`) : [];
-                const isDone = checked.has(key);
-                const addonTags = addons.length
-                    ? addons.map(a => `<span class="addon-tag">${a}</span>`).join('')
-                    : `<span class="addon-tag" style="color:#475569">Standard</span>`;
+                const done = checked.has(key);
+                const addonHtml = addons.length
+                    ? addons.map(a => `<span class="px-2 py-0.5 rounded-md bg-white/5 border border-white/8 text-[10px] text-slate-400">${a}</span>`).join('')
+                    : `<span class="px-2 py-0.5 rounded-md bg-white/5 border border-white/8 text-[10px] text-slate-600">Standard</span>`;
 
                 return `
-        <div class="item-row" id="row-${tableId}-${key.replace(/\s/g, '_')}" style="${isDone ? 'opacity:0.4' : ''}">
-            <div class="item-check ${isDone ? 'checked' : ''}" onclick="toggleItem('${tableId}','${key}')"></div>
-            <div class="qty-pill">${qty}</div>
-            <div class="item-info">
-                <div class="item-name" style="${isDone ? 'text-decoration:line-through' : ''}">${key}</div>
-                <div class="item-addons">${addonTags}</div>
+        <div class="flex items-start gap-3 p-3 rounded-xl bg-white/[0.025] border border-transparent hover:bg-white/[0.05] hover:border-white/10 transition-all mb-2 last:mb-0 ${done ? 'opacity-40' : ''}">
+            <button onclick="toggleItem('${tableId}','${key}')"
+                class="mt-0.5 w-5 h-5 rounded-md border-2 flex-shrink-0 flex items-center justify-center transition-all
+                    ${done ? 'bg-emerald-500 border-emerald-500' : 'border-slate-600 hover:border-indigo-500'}">
+                ${done ? '<svg class="w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>' : ''}
+            </button>
+            <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-black flex-shrink-0">${qty}</div>
+            <div class="flex-1 min-w-0">
+                <div class="font-bold text-sm text-white ${done ? 'line-through' : ''}">${key}</div>
+                <div class="flex flex-wrap gap-1 mt-1">${addonHtml}</div>
             </div>
         </div>`;
             }).join('');
 
             const footerBtns = status === 'ready'
-                ? `<button class="btn btn-success" onclick="markServed('${tableId}')">
-               <i data-lucide="check" style="width:15px"></i> Mark Served
+                ? `<button onclick="markServed('${tableId}')"
+              class="flex-1 py-2.5 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-black text-sm flex items-center justify-center gap-2 hover:bg-emerald-500 hover:text-white transition-all">
+              <i data-lucide="check" class="w-4"></i> Mark Served
            </button>`
                 : status === 'prep'
-                    ? `<button class="btn btn-primary" onclick="setStatus('${tableId}','ready')">
-               <i data-lucide="bell-ring" style="width:15px"></i> Ready to Serve
+                    ? `<button onclick="setStatus('${tableId}','ready')"
+              class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-black text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-all">
+              <i data-lucide="bell-ring" class="w-4"></i> Ready to Serve
            </button>
-           <button class="btn btn-ghost" onclick="markServed('${tableId}')">Skip</button>`
-                    : `<button class="btn btn-primary" onclick="setStatus('${tableId}','prep')">
-               <i data-lucide="flame" style="width:15px"></i> Start Preparing
+           <button onclick="markServed('${tableId}')"
+              class="px-4 py-2.5 rounded-xl bg-white/5 text-slate-400 border border-white/10 font-bold text-sm hover:text-white transition-all">Skip</button>`
+                    : `<button onclick="setStatus('${tableId}','prep')"
+              class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-black text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-all">
+              <i data-lucide="flame" class="w-4"></i> Start Preparing
            </button>
-           <button class="btn btn-ghost" onclick="markServed('${tableId}')">Dismiss</button>`;
+           <button onclick="markServed('${tableId}')"
+              class="px-4 py-2.5 rounded-xl bg-white/5 text-slate-400 border border-white/10 font-bold text-sm hover:text-white transition-all">Dismiss</button>`;
 
-            const tClass = timerClass(elapsed);
-            const tIcon = tClass === 'alert' ? '⚠️' : '⏱';
+            const cardBorder = urgent ? 'card-urgent' : `card-${status}`;
 
             return `
-    <div class="order-card status-${status} ${isUrgent ? 'urgent' : ''}" id="card-${tableId}">
-        <div class="card-head">
+    <div class="order-card bg-[#0d1626] border border-white/[0.07] rounded-2xl overflow-hidden flex flex-col hover:shadow-2xl transition-all ${cardBorder}" id="card-${tableId}">
+        <!-- Header -->
+        <div class="px-5 pt-4 pb-3 border-b border-white/[0.07] flex items-center justify-between gap-2">
             <div>
-                <div class="table-id">Table ${tableId.replace('table_', '')}</div>
-                <div class="table-sub">${items.length} item${items.length > 1 ? 's' : ''} · ${checked.size}/${items.length} checked</div>
+                <div class="font-outfit font-black text-2xl text-white">Table ${tNum}</div>
+                <div class="text-xs text-slate-500 mt-0.5">${items.length} item${items.length > 1 ? 's' : ''} · ${checked.size}/${items.length} done</div>
             </div>
-            <div class="card-badges">
-                ${isUrgent ? `<span class="badge badge-urgent">URGENT</span>` : badgeMap[status]}
-                <div class="timer ${tClass}">${tIcon} <span class="timer-val" data-table="${tableId}">${fmtTime(elapsed)}</span></div>
+            <div class="flex items-center gap-2 flex-shrink-0">
+                ${urgent ? `<span class="px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-black uppercase tracking-wider">URGENT</span>` : statusBanner[status]}
+                <div class="flex items-center gap-1 font-outfit font-bold text-sm ${timerColor}">
+                    <span>${timerEmoji}</span>
+                    <span class="timer-val tabular-nums" data-table="${tableId}">${fmtTime(elapsed)}</span>
+                </div>
             </div>
         </div>
-        <div class="item-list">${itemsHtml}</div>
-        <div class="card-foot">${footerBtns}</div>
+
+        <!-- Items -->
+        <div class="p-4 flex-1">${itemsHtml}</div>
+
+        <!-- Footer -->
+        <div class="px-4 pb-4 flex gap-2">${footerBtns}</div>
     </div>`;
         }
 
-        // ── ACTIONS ──
+        // ── ACTIONS
         function toggleItem(tableId, itemKey) {
             if (!checkedItems[tableId]) checkedItems[tableId] = new Set();
             const s = checkedItems[tableId];
@@ -979,7 +560,7 @@
             orderStatuses[tableId] = status;
             if (status === 'ready') {
                 playBeep();
-                showToast(`✅ Table ${tableId} — Order Ready!`, 'var(--green)');
+                showToast(`✅ Table ${tableId.replace('table_', '')} — Order Ready!`, '#10b981');
             }
             renderGrid(window._lastStates || {});
         }
@@ -987,7 +568,7 @@
         async function markServed(tableId) {
             const confirmed = ((window._lastStates || {})[tableId] || {}).confirmed || {};
             itemsServedTotal += Object.keys(confirmed).length;
-            showToast(`🍽️ Table ${tableId} served!`, 'var(--primary)');
+            showToast(`🍽️ Table ${tableId.replace('table_', '')} served!`, '#6366f1');
             await fetch(`${API}/order/reset?table_id=${tableId}`, { method: 'POST' });
             delete orderStatuses[tableId];
             delete orderTimestamps[tableId];
@@ -996,28 +577,25 @@
         }
 
         function forceRefresh() {
-            const icon = document.getElementById('refresh-icon');
-            icon.style.animation = 'spin 0.6s linear';
-            setTimeout(() => icon.style.animation = '', 700);
+            document.getElementById('refresh-icon').style.animation = 'spin 0.6s linear';
+            setTimeout(() => document.getElementById('refresh-icon').style.animation = '', 700);
             fetchAll();
         }
 
-        // ── LIVE TIMER UPDATE (every second) ──
+        // ── LIVE TIMERS (every second, no re-render)
         setInterval(() => {
             document.querySelectorAll('.timer-val[data-table]').forEach(el => {
                 const tid = el.getAttribute('data-table');
                 const e = getElapsed(tid);
                 el.textContent = fmtTime(e);
-                const card = document.getElementById(`card-${tid}`);
-                const timer = el.closest('.timer');
-                if (card && timer) {
-                    timer.className = 'timer ' + timerClass(e);
-                    if (e > 600) card.classList.add('urgent');
-                }
+                const color = e > 600 ? 'text-rose-400 timer-alert' : e > 300 ? 'text-amber-400' : 'text-emerald-400';
+                const timer = el.closest('div.flex');
+                if (timer) timer.className = `flex items-center gap-1 font-outfit font-bold text-sm ${color}`;
+                if (e > 600) document.getElementById(`card-${tid}`)?.classList.add('card-urgent');
             });
         }, 1000);
 
-        // ── POLL ──
+        // ── POLL
         setInterval(fetchAll, 3000);
         window.onload = fetchAll;
     </script>
