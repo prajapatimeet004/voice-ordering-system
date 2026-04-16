@@ -275,7 +275,8 @@ async def classify(transcript: str = Form(...), table_id: str = Form("default"))
                 dish_name = item["dish"]
                 qty = item.get("quantity", 1)
                 addons = item.get("addons", [])
-                
+                modified_addons = item.get("modified_addons", {})
+
                 # SKIP if this dish is already being handled by a modification entry
                 # (e.g. "make butter chicken more spicy" – no new item should be added)
                 if dish_name in modification_targets:
@@ -287,7 +288,26 @@ async def classify(transcript: str = Form(...), table_id: str = Form("default"))
                     print(f"DEBUG: Skipping auto-add for '{dish_name}' (needs confirmation)")
                     continue
 
-                # Check Availability
+                # KEY FIX: When intent is "modify_order" AND the dish already exists
+                # in the confirmed order, treat this as an addon update — NOT a new item.
+                # This handles cases like "Masala dosa thoda teekha rakhna" where the LLM
+                # puts the dish in items[] without a corresponding modifications[] entry.
+                if intent == "modify_order" and dish_name in current_order_state["confirmed"]:
+                    existing = current_order_state["confirmed"][dish_name]
+                    if modified_addons:
+                        # Use structured addon merging if LLM gave us a dict
+                        current_addons = existing.get("addons", [])
+                        existing["addons"] = merge_structured_addons(current_addons, modified_addons)
+                        print(f"DEBUG: [MODIFY_INTENT] Merged addons for existing '{dish_name}': {existing['addons']}")
+                    elif addons:
+                        # Fallback: simple list merge
+                        existing["addons"] = list(set(existing.get("addons", []) + addons))
+                        print(f"DEBUG: [MODIFY_INTENT] Merged addons (list) for existing '{dish_name}': {existing['addons']}")
+                    else:
+                        print(f"DEBUG: [MODIFY_INTENT] '{dish_name}' already in order, no addons to merge. Skipping.")
+                    continue  # Do NOT add as new item
+
+                # Check Availability (only for genuinely new items)
                 is_available, _ = inventory_service.check_availability(dish_name, qty)
                 if not is_available:
                     print(f"DEBUG: {dish_name} is OUT OF STOCK. Not adding.")
