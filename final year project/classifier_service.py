@@ -688,7 +688,7 @@ Detect when the user wants to modify an already placed order.
 Keywords indicating change:
 - English: change, replace, update, instead
 - Hindi: badal do, change karo, hatao
-- Gujarati: badli do, hataavi do
+- Gujarati: badli do, hataavi do, ni jagya, ni jagyae, ni badle, na badle
 
 ---
 
@@ -714,7 +714,7 @@ Always return output in JSON format:
 ### ⚠️ 7. Important Rules
 - Always normalize dish names to menu-friendly format
 - **STRICT ITEM RULE:** Any item mentioned as the "final choice" in the current transcript MUST be included in the `items` list.
-- **HISTORY REPLACEMENT RULE:** If a user replaces an item that is ALREADY in the *Current Order Summary* with a new item (e.g., "Remove A and add B instead"), you MUST:
+- **HISTORY REPLACEMENT RULE:** If a user replaces an item that is ALREADY in the *Current Order Summary* with a new item (e.g., "Remove A and add B instead", "A ni jagya B karo", "A ki jagah B"), you MUST:
     1. Add the removal of A to the `modifications` list.
     2. Add the new item B to the `items` list.
 - **Instant Self-Correction:** If a user mentions an item but immediately negates/cancels it in the *same* transcript (e.g., "Butter chicken... no wait, Chole Bhature"), the final intended item (Chole Bhature) MUST go into the `items` list. DO NOT put new items from the current transcript into the `modifications` list.

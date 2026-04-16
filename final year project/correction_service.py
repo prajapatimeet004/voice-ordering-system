@@ -78,7 +78,7 @@ CORRECTION_DICT = {
         # Gujarati
         "nai", "na na", "khotu", "badlo", "badli do", "eni jagyae", "biju aapo",
         "e nathi", "pela valu nahi", "sachu karo", "sudharjo", "ena badle", "badli do",
-        "ni badle", "na badle", "ne badle", "ni jagyae", "na jagyae",
+        "ni badle", "na badle", "ne badle", "ni jagyae", "na jagyae", "ni jagya", "na jagya",
         # English
         "no no", "not that", "change it", "replace it", "instead", "wrong",
         "modify", "update it", "i mean", "sorry", "change karo", "rakhna", "rakhjo", "kar dena", "kari dejo",
@@ -385,7 +385,7 @@ def process_correction(transcript: str, current_order_items=None):
     - "chai ki jagah coffee de do" means: "Give coffee instead of chai" ->
       [{{ "action": "modify", "original_dish": "chai", "new_dish": "coffee", "dish": "coffee", "quantity": 1, "is_relative": false, "raw_addons": [], "correction_found": true }}]
     
-    CRITICAL PATTERN: When you see "X ni badle", "X ki jagah", "X instead of", "X na badle", "X ne badle":
+    CRITICAL PATTERN: When you see "X ni badle", "X ki jagah", "X instead of", "X na badle", "X ne badle", "X ni jagya", "X ni jagyae":
     - X is the ORIGINAL DISH being REMOVED/REPLACED.
     - The NEW DISH is mentioned elsewhere in the sentence.
     - Use action: 'modify' with original_dish = X and new_dish = the replacement.

@@ -56,7 +56,7 @@
         "alternative": "Chai"
     },
     "Burger": {
-        "stock": 50,
+        "stock": 48,
         "alternative": "Pizza"
     },
     "Pizza": {
@@ -64,11 +64,11 @@
         "alternative": "Burger"
     },
     "Gulab Jamun": {
-        "stock": 50,
+        "stock": 48,
         "alternative": "Jalebi"
     },
     "Jalebi": {
-        "stock": 50,
+        "stock": 49,
         "alternative": "Gulab Jamun"
     },
     "Idli": {
@@ -80,7 +80,7 @@
         "alternative": "Idli"
     },
     "Uttapam": {
-        "stock": 50,
+        "stock": 49,
         "alternative": "Masala Dosa"
     },
     "Pav Bhaji": {
@@ -112,7 +112,7 @@
         "alternative": "Dal Makhani"
     },
     "Chicken Tikka": {
-        "stock": 49,
+        "stock": 48,
         "alternative": "Paneer Tikka"
     },
     "Mutton Rogan Josh": {
