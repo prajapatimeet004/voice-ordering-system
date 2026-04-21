@@ -52,23 +52,23 @@
         "alternative": "Chai"
     },
     "Tea": {
-        "stock": 100,
+        "stock": 96,
         "alternative": "Chai"
     },
     "Burger": {
-        "stock": 48,
+        "stock": 43,
         "alternative": "Pizza"
     },
     "Pizza": {
-        "stock": 50,
+        "stock": 48,
         "alternative": "Burger"
     },
     "Gulab Jamun": {
-        "stock": 48,
+        "stock": 43,
         "alternative": "Jalebi"
     },
     "Jalebi": {
-        "stock": 49,
+        "stock": 48,
         "alternative": "Gulab Jamun"
     },
     "Idli": {
@@ -126,5 +126,9 @@
     "Prawn Curry": {
         "stock": 50,
         "alternative": "Fish Curry"
+    },
+    "Tandoori Roti": {
+        "stock": 100,
+        "alternative": "Naan"
     }
 }

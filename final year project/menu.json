@@ -126,5 +126,9 @@
     "Prawn Curry": {
         "category": "Main Course",
         "price": 350
+    },
+    "Tandoori Roti": {
+        "category": "Breads",
+        "price": 30
     }
 }

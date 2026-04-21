@@ -337,14 +337,17 @@ async def classify(transcript: str = Form(...), table_id: str = Form("default"))
                 changes = mod.get("changes", {})
                 
                 # Find the target item in current order
-                matched_target, _, _ = fuzzy_match_dish(target)
-                if matched_target not in current_order_state["confirmed"]:
+                matched_target, score, _ = fuzzy_match_dish(target)
+                if score < 0.65 or matched_target not in current_order_state["confirmed"]:
                     # Try exact match if fuzzy fails
-                    if target not in current_order_state["confirmed"]:
-                        print(f"DEBUG: Modification target '{target}' not found in order.")
-                        continue
-                    else:
+                    if target in current_order_state["confirmed"]:
                         matched_target = target
+                    else:
+                        print(f"DEBUG: Modification target '{target}' not found in order.")
+                        feedback = f"Maaf karjo, tamara order ma {target} nathi. Tamare biju kai change karvu che? (Sorry, {target} is not in your order. What would you like to change?)"
+                        if feedback not in response_text:
+                            response_text += " " + feedback
+                        continue
 
                 if action == "remove":
                     del current_order_state["confirmed"][matched_target]
