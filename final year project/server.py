@@ -19,11 +19,16 @@ from addon_extractor import merge_structured_addons
 from tts_service import generate_speech
 import response_service
 import inventory_service
-
 try:
     import winsound
 except ImportError:
     winsound = None
+ 
+ 
+# Keywords that indicate a clear intent to add another unit of a dish
+ADDITION_KEYWORDS = [
+    "more", "another", "plus", "extra plate", "one more", "ek bija", "ek biju", "phir se", "aur ek", "beju", "bij"
+]
 
 
 # Use a menu dictionary for prices and categories
@@ -56,15 +61,22 @@ def create_default_table_state():
 # Dictionary to store state for each table_id
 tables_state = defaultdict(create_default_table_state)
 
+def ensure_table_prefix(table_id: str) -> str:
+    """Ensures table_id is in the format 'table_X'."""
+    if not table_id or table_id == "default":
+        return "table_default"
+    if not table_id.startswith("table_"):
+        return f"table_{table_id}"
+    return table_id
+
 def get_table_state(table_id: str = "default"):
     """Helper to get state for a specific table."""
-    if not table_id:
-        table_id = "default"
-    return tables_state[table_id]
+    tid = ensure_table_prefix(table_id)
+    return tables_state[tid]
 
 # Keep current_order_state for backward compatibility but point it to a default
 # This will be replaced by per-request lookups
-current_order_state = tables_state["default"]
+current_order_state = tables_state["table_default"]
 
 # Enable CORS for frontend integration
 app.add_middleware(
@@ -144,9 +156,16 @@ async def get_order_state(table_id: str = "default"):
 
 @app.get("/order/all_states")
 async def get_all_order_states():
-    """Returns the order states for all tables."""
+    """Returns the order states for all tables that have activity (confirmed or pending)."""
     # Convert defaultdict to regular dict for clean JSON serialization
-    serialized_states = {tid: state for tid, state in tables_state.items() if state["confirmed"]}
+    serialized_states = {}
+    for tid, state in tables_state.items():
+        has_confirmed = bool(state.get("confirmed"))
+        has_pending = bool(state.get("pending_confirmation"))
+        
+        if has_confirmed or has_pending:
+            serialized_states[tid] = state
+            
     print(f"DEBUG: [ALL_STATES] Returning {len(serialized_states)} active table states.")
     return serialized_states
 
@@ -292,19 +311,23 @@ async def classify(transcript: str = Form(...), table_id: str = Form("default"))
                 # in the confirmed order, treat this as an addon update — NOT a new item.
                 # This handles cases like "Masala dosa thoda teekha rakhna" where the LLM
                 # puts the dish in items[] without a corresponding modifications[] entry.
-                if intent == "modify_order" and dish_name in current_order_state["confirmed"]:
+                dish_already_exists = dish_name in current_order_state["confirmed"]
+                has_addition_keywords = any(kw in transcript.lower() for kw in ADDITION_KEYWORDS)
+
+                if dish_already_exists and not has_addition_keywords:
+                    # Treat as update even if LLM said it's a new item (Secondary Guard)
                     existing = current_order_state["confirmed"][dish_name]
                     if modified_addons:
                         # Use structured addon merging if LLM gave us a dict
                         current_addons = existing.get("addons", [])
                         existing["addons"] = merge_structured_addons(current_addons, modified_addons)
-                        print(f"DEBUG: [MODIFY_INTENT] Merged addons for existing '{dish_name}': {existing['addons']}")
+                        print(f"DEBUG: [GUARD] Merged addons for existing '{dish_name}': {existing['addons']}")
                     elif addons:
                         # Fallback: simple list merge
                         existing["addons"] = list(set(existing.get("addons", []) + addons))
-                        print(f"DEBUG: [MODIFY_INTENT] Merged addons (list) for existing '{dish_name}': {existing['addons']}")
+                        print(f"DEBUG: [GUARD] Merged addons (list) for existing '{dish_name}': {existing['addons']}")
                     else:
-                        print(f"DEBUG: [MODIFY_INTENT] '{dish_name}' already in order, no addons to merge. Skipping.")
+                        print(f"DEBUG: [GUARD] '{dish_name}' already in order, no new addition words found. Skipping.")
                     continue  # Do NOT add as new item
 
                 # Check Availability (only for genuinely new items)

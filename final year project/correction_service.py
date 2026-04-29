@@ -21,8 +21,16 @@ def get_llm_client():
         )
     return _llm_client
 
-def get_groq_client():
-    return get_llm_client()
+_cerebras_client = None
+def get_cerebras_client():
+    global _cerebras_client
+    if _cerebras_client is None:
+        from openai import OpenAI
+        _cerebras_client = OpenAI(
+            base_url="https://api.cerebras.ai/v1",
+            api_key="csk-9fhkv3hvmt4krfdrkcwjhwvvd9wx9d8ddem4jcdndrhcphty"
+        )
+    return _cerebras_client
 
 _gemini_model = None
 
@@ -409,10 +417,10 @@ def process_correction(transcript: str, current_order_items=None):
     CRITICAL: If a user mentions multiple corrections (e.g., "don't add X, instead add Y"), you MUST provide separate entries or ensure all intents are captured. Every "nahi", "na", or "badle" intent must be reflected.
     """
 
-    client = get_llm_client()
+    client = get_cerebras_client()
     try:
         completion = client.chat.completions.create(
-            model="sarvam-m",
+            model="qwen-3-235b-a22b-instruct-2507",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Correction Transcript: {transcript}"}

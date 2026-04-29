@@ -2,9 +2,31 @@ import os
 import json
 import re
 import time
+import datetime
 from dotenv import load_dotenv
 from rapidfuzz import process, fuzz
 import asyncio
+
+# ─── Token Usage Logger ───────────────────────────────────────────────────────
+_LOG_DIR = os.path.join(os.path.dirname(__file__), "logs")
+
+def log_token_usage(transcript: str, input_tokens: int, output_tokens: int, latency_ms: float, table: str = "unknown"):
+    """Appends one line per LLM call to a daily log file inside logs/."""
+    os.makedirs(_LOG_DIR, exist_ok=True)
+    today = datetime.date.today().strftime("%Y-%m-%d")
+    log_file = os.path.join(_LOG_DIR, f"token_usage_{today}.log")
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    total_tokens = input_tokens + output_tokens
+    snippet = transcript[:60].replace("\n", " ") if transcript else ""
+    line = (
+        f"[{now}] Table:{table} | "
+        f"Input:{input_tokens} | Output:{output_tokens} | Total:{total_tokens} | "
+        f"Latency:{latency_ms:.0f}ms | Transcript:\"{snippet}...\""
+    )
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(line + "\n")
+    print(f"DEBUG: [TOKEN LOG] {line}")
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 load_dotenv(override=True)
@@ -29,14 +51,17 @@ def get_llm_client():
         )
     return _llm_client
 
-_groq_client = None
+_cerebras_client = None
 
-def get_groq_client():
-    global _groq_client
-    if _groq_client is None:
-        from groq import AsyncGroq
-        _groq_client = AsyncGroq(api_key=GROQ_API_KEY)
-    return _groq_client
+def get_cerebras_client():
+    global _cerebras_client
+    if _cerebras_client is None:
+        from openai import AsyncOpenAI
+        _cerebras_client = AsyncOpenAI(
+            base_url="https://api.cerebras.ai/v1",
+            api_key="csk-9fhkv3hvmt4krfdrkcwjhwvvd9wx9d8ddem4jcdndrhcphty"
+        )
+    return _cerebras_client
 
 
 
@@ -473,11 +498,21 @@ def match_dish_with_embeddings(dish_name: str):
             candidates.update(_KEYWORD_MAP[t])
             
     if candidates and len(candidates) == 1:
-        # Perfect unique hit
+        # Unique hit from keywords
         match = list(candidates)[0]
+        
+        # --- NEW: Partial Match Check ---
+        # If user said 1 word but dish has 2+ words, force confirmation
+        match_tokens = re.sub(r'[^a-zA-Z0-9\s]', '', match).lower().split()
+        is_partial = len(input_tokens) < len(match_tokens)
+        
         end_time = time.perf_counter()
-        print(f"DEBUG: [TIME] Fast Match Hit in {(end_time - start_time)*1000:.2f}ms! '{dish_name}' -> '{match}'")
-        return match, 1.0, False
+        if is_partial:
+            print(f"DEBUG: [AMBIGUOUS] Partial Keyword Match Hit in {(end_time - start_time)*1000:.2f}ms! '{dish_name}' -> '{match}'")
+            return match, 0.82, True # Explicitly flag as ambiguous and slightly lower score
+        else:
+            print(f"DEBUG: [TIME] Perfect Keyword Match Hit in {(end_time - start_time)*1000:.2f}ms! '{dish_name}' -> '{match}'")
+            return match, 1.0, False
 
     # --- Phase 2: Semantic Similarity Fallback ---
     # Triggered if no unique keyword match or input is descriptive
@@ -496,6 +531,12 @@ def match_dish_with_embeddings(dish_name: str):
         # If second best is within 0.05 of the best
         if (float(top_v[0]) - float(top_v[1])) < 0.05 and float(top_v[0]) > 0.40:
             is_ambiguous = True
+
+    # --- Decision Engine ---
+    # Force ambiguity if input is partial (e.g. 1 word matching 2+ words)
+    match_tokens = re.sub(r'[^a-zA-Z0-9\s]', '', semantic_match).lower().split()
+    if len(input_tokens) < len(match_tokens) and len(input_tokens) == 1:
+        is_ambiguous = True
 
     # --- NEW: Semantic Early Stop ---
     # User requested: "if we get the semantic phase >80 still skip that part"
@@ -623,6 +664,11 @@ Users may freely mix languages.
 - **REMOVE/CANCEL**: If a user asks to "remove/cancel X", only output a modification if "X" is currently in the order. If it's not there, ignore the removal but acknowledge it politely.
 - **ADD vs UPDATE**: If the user says "more X" or "add X", check if it's already there. If yes, use `action: "update"` with `changes: {"X": "increase"}`. If no, use `action: "add"` or include it in `items`.
 - **CRITICAL**: If a user says "remove X" for an addon, YOU MUST find the corresponding dish in the current order and set its addon to "remove" (e.g., target_item: "Dosa", changes: {"chutney": "remove"}). NEVER use an addon name as the 'target_item'.
+
+#### 🚫 NO DUPLICATE WITHOUT EXPLICIT INTENT 🚫
+- If a dish is already in the `Current Order Summary`, mentioning its name again **WITHOUT** explicit addition words (like "one more", "another", "plus", "extra plate", "ek biju", "phir se", "aur ek") must **NEVER** result in a new item in the `items` list.
+- **EXAMPLE**: If order has "1x Masala Dosa" and user says "Masala Dosa butter vadhu", the output should have `items: []` and a `modification` for the existing Dosa.
+- **ONLY** add to `items` if they say "One more Masala Dosa" or "Ek bija Masala Dosa add karo".
 
 AVAILABLE MENU:
 {AVAILABLE_MENU}
@@ -760,18 +806,29 @@ Output: {
   "language_code": "gu-IN"
 }
 
-#### Case E: Modification of EXISTING Order
-Input: "Masala dosa hataavi do ane ek idli add karo"
+#### Case E: Contextual Modification (No Duplicate)
+Input: "Masala dosa thodu teekhu karjo"
 Current Order Summary: "1x Masala Dosa"
 Output: {
   "intent": "modify_order",
-  "items": [
-    { "name": "Idli Sambhar", "quantity": 1, "addons": {} }
-  ],
+  "items": [],
   "modifications": [
-    { "target_item": "Masala Dosa", "action": "remove", "changes": {} }
+    { "target_item": "Masala Dosa", "action": "update", "changes": { "spicy": "increase" } }
   ],
-  "response_text": "Done! Masala dosa hataavi ne ek idli add kari didhi che.",
+  "response_text": "Done! Masala dosa teekhu kari daish.",
+  "language_code": "gu-IN"
+}
+
+#### Case F: Explicit Addition (Duplicate)
+Input: "Ek biju masala dosa add karo"
+Current Order Summary: "1x Masala Dosa"
+Output: {
+  "intent": "new_order",
+  "items": [
+    { "name": "Masala Dosa", "quantity": 1, "addons": {} }
+  ],
+  "modifications": [],
+  "response_text": "Saras! Ek biju Masala Dosa add kari didhu che.",
   "language_code": "gu-IN"
 }
 
@@ -821,6 +878,20 @@ Output: {
     - **NEVER GUESS**. If a word only slightly sounds like a food item but is not clearly one, DO NOT extract it. 
     - For example, if the user says "Shahane", "Kishi", or other random words, return `items: []` and ask "Maaf karjo, tame shu kidhu?" (Sorry, what did you say?).
     - Only extract items if you are at least 90% sure the user intended to order that specific dish.
+- **🚫 NONSENSE / UNKNOWN 🚫**: If the user says something that is not clearly an order, modification, or confirmation (e.g., "kuch bhi", "kuchh bhi", "xyz", "abracadabra"):
+    1.  **NEVER** map it to `negative` or `affirmative` intent.
+    2.  Return `intent: "none"`, `items: []`.
+    3.  Ask for repetition in `response_text` ("Maaf karjo, tame shu kidhu?").
+
+#### Case J: Nonsense / Unknown
+Input: "kuchh bhi bol rha hu"
+Output: {
+  "intent": "none",
+  "items": [],
+  "modifications": [],
+  "response_text": "Maaf karjo, tame shu kidhu? Ek vaar fari thi bolsho?",
+  "language_code": "hi-IN"
+}
 
 Goal: Act like a smart Indian waiter who understands any language mix, never misses customization, and handles corrections naturally.
 """
@@ -840,7 +911,7 @@ Goal: Act like a smart Indian waiter who understands any language mix, never mis
     # Estimate tokens added by hints (approx 4 chars per token)
     hint_tokens = len(hint_prompt) // 4
     
-    client = get_groq_client()
+    client = get_cerebras_client()
     preprocessed_text = preprocess_transcript(transcript)
     
     final_order_result = {
@@ -858,23 +929,32 @@ Goal: Act like a smart Indian waiter who understands any language mix, never mis
         # Start Timing the LLM Call
         llm_start = time.perf_counter()
         
-        # Run LLM call using Groq (much faster than Sarvam for classification)
+        # Run LLM call using Cerebras
         completion = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="qwen-3-235b-a22b-instruct-2507",
             messages=[
-                {"role": "system", "content": system_prompt},
+                {"role": "system", "content": system_prompt_template},
                 {"role": "user", "content": f"{hint_prompt}User Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}"}
             ],
             response_format={"type": "json_object"},
             temperature=0.1
         )
-
-
         
+        text_content = completion.choices[0].message.content
         llm_end = time.perf_counter()
         total_llm_time = (llm_end - llm_start) * 1000
         print(f"DEBUG: [METRICS] Keyword Scanning: {hint_latency:.2f}ms | Added Tokens: ~{hint_tokens}")
         print(f"DEBUG: [METRICS] LLM Extraction: {total_llm_time:.2f}ms")
+
+        # ── Token Usage Logging ──
+        usage = getattr(completion, "usage", None)
+        if usage:
+            log_token_usage(
+                transcript=transcript,
+                input_tokens=getattr(usage, "prompt_tokens", 0),
+                output_tokens=getattr(usage, "completion_tokens", 0),
+                latency_ms=total_llm_time
+            )
 
         text_content = completion.choices[0].message.content
         # print(f"DEBUG LLM Raw: {text_content}") # Silencing reasoning process
@@ -921,11 +1001,18 @@ Goal: Act like a smart Indian waiter who understands any language mix, never mis
             }
             final_order_result["items"].append(processed_item)
             
+            # --- NEW: Raw Transcript Guard ---
+            # If the LLM guessed a multi-word name but only one word was said, force confirm
+            raw_clean = re.sub(r'[^a-zA-Z0-9\s]', '', transcript).lower()
+            dish_clean = re.sub(r'[^a-zA-Z0-9\s]', '', processed_item["dish"]).lower()
+            is_partial_in_raw = (dish_clean not in raw_clean) and any(word in raw_clean for word in dish_clean.split())
+            
             # Threshold checks
             AUTO_REPLACE_THRESHOLD = 0.85
             MIN_CONFIDENCE_THRESHOLD = 0.65
 
-            if is_ambiguous or (dish_score >= MIN_CONFIDENCE_THRESHOLD and dish_score < AUTO_REPLACE_THRESHOLD):
+            if is_ambiguous or is_partial_in_raw or (dish_score >= MIN_CONFIDENCE_THRESHOLD and dish_score < AUTO_REPLACE_THRESHOLD):
+                # Suggest item for confirmation
                 final_order_result["needs_confirmation"].append({
                     "original": dish,
                     "suggested": mapped_dish.strip(),
@@ -934,14 +1021,16 @@ Goal: Act like a smart Indian waiter who understands any language mix, never mis
                     "addons": processed_item["addons"]
                 })
             elif dish_score >= AUTO_REPLACE_THRESHOLD:
+                # Auto-confirm high confidence
                 final_order_result["confirmed"][processed_item["dish"]] = {
                     "quantity": qty,
                     "addons": processed_item["addons"]
                 }
             else: # Below MIN_CONFIDENCE_THRESHOLD
+                # Unknown dish - Ask to repeat
                 final_order_result["not_in_menu"].append(dish)
                 if not final_order_result["response_text"]:
-                    final_order_result["response_text"] = f"Maaf karjo, eni badle biju kai levu che? (Sorry, {dish} is not available)."
+                    final_order_result["response_text"] = f"Maaf karjo, ek vaar fari thi bolsho? ('{dish}' khabar na padi). (Sorry, I didn't catch {dish}, could you say it again?)"
 
         # Store modifications for server processing
         final_order_result["modifications"] = extracted_modifications

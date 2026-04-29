@@ -255,6 +255,52 @@
             font-weight: 700;
         }
 
+        /* VAD Status Badge */
+        .vad-status {
+            position: absolute;
+            top: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 0.5rem 1.25rem;
+            border-radius: 100px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            transition: 0.4s;
+            border: 1px solid transparent;
+        }
+
+        .vad-status.active {
+            background: rgba(99, 102, 241, 0.2);
+            border-color: var(--primary);
+            color: #a5b4fc;
+        }
+
+        .vad-status.listening {
+            background: rgba(239, 68, 68, 0.2);
+            border-color: #ef4444;
+            color: #fca5a5;
+            animation: pulse-badge 1s infinite;
+        }
+
+        .vad-status.processing {
+            background: rgba(245, 158, 11, 0.2);
+            border-color: var(--secondary);
+            color: #fde68a;
+        }
+
+        @keyframes pulse-badge {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
         /* Advanced Waveform Visualizer */
         .visualizer {
             display: flex;
@@ -308,6 +354,18 @@
             transform: scale(1.1);
             box-shadow: 0 0 80px var(--primary);
             border-color: #fff;
+        }
+
+        .mic-btn.vad-on {
+            box-shadow: 0 0 60px rgba(99, 102, 241, 0.6), 0 0 20px rgba(139, 92, 246, 0.4);
+            border-color: rgba(165, 180, 252, 0.4);
+        }
+
+        .mic-label {
+            margin-top: 1rem;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            letter-spacing: 1px;
         }
 
         .assistant-card {
@@ -415,6 +473,9 @@
                     TABLE <span id="selected-table-id">1</span>
                 </div>
 
+                <!-- VAD Status indicator -->
+                <div class="vad-status" id="vad-status">&#x25cf; VAD OFF</div>
+
                 <div class="visualizer" id="visualizer">
                     <div class="bar"></div>
                     <div class="bar" style="animation-delay: 0.1s"></div>
@@ -429,11 +490,13 @@
                     <button class="mic-btn" id="mic-btn">
                         <i data-lucide="mic" style="width:50px; height:50px; color:#fff;"></i>
                     </button>
+                    <p class="mic-label" id="mic-label">TAP TO START LISTENING</p>
                 </div>
 
                 <div class="assistant-card">
                     <p id="assistant-reply">"Jai Shri Krishna! Ready for your order."</p>
-                    <p id="transcript" style="margin-top:1rem; opacity:0.6; font-size:0.9rem;">Tap to start...</p>
+                    <p id="transcript" style="margin-top:1rem; opacity:0.6; font-size:0.9rem;">Tap mic to activate...
+                    </p>
                 </div>
 
                 <div class="action-footer">
@@ -454,29 +517,47 @@
             : window.location.origin;
 
         let currentTableId = null;
-        let isRecording = false;
-        let mediaRecorder;
+
+        // ─── VAD Configuration ──────────────────────────────────────────
+        const SPEECH_THRESHOLD = 15;   // RMS volume (0-255) to count as speech
+        const SILENCE_DURATION = 1500; // ms of silence before auto-sending
+
+        // ─── VAD Runtime State ──────────────────────────────────────────
+        let vadActive = false;  // VAD toggle (mic btn tap)
+        let isProcessing = false;  // locked while API is in-flight or TTS playing
+        let isSpeaking = false;  // currently recording a speech chunk
+        let silenceTimer = null;
         let audioChunks = [];
+        let mediaRecorder = null;
+        let micStream = null;
+        let audioCtx = null;
+        let analyser = null;
+        let animFrameId = null;
+
+        // ─── UI Elements ────────────────────────────────────────────────
+        const micBtn = document.getElementById('mic-btn');
+        const micLabel = document.getElementById('mic-label');
+        const vadStatusEl = document.getElementById('vad-status');
+        const transcriptEl = document.getElementById('transcript');
+        const replyEl = document.getElementById('assistant-reply');
 
         const CATEGORY_EMOJIS = {
-            'Main Course': '🍛',
-            'South Indian': '🥘',
-            'Starters': '🍢',
-            'Snacks': '🍟',
-            'Dessert': '🍮',
-            'Breads': '🫓',
-            'Beverages': '☕',
-            'Fast Food': '🍔'
+            'Main Course': '&#x1F35B;', 'South Indian': '&#x1F958;', 'Starters': '&#x1F362;',
+            'Snacks': '&#x1F35F;', 'Dessert': '&#x1F36E;', 'Breads': '&#x1FAD3;',
+            'Beverages': '&#x2615;', 'Fast Food': '&#x1F354;'
         };
 
+        // ─── Table / Menu ────────────────────────────────────────────────
         function selectTable(id) {
-            currentTableId = id;
-            document.getElementById('selected-table-id').innerText = id;
+            currentTableId = id.startsWith('table_') ? id : `table_${id}`;
+            document.getElementById('selected-table-id').innerText = id.replace('table_', '');
             document.getElementById('table-screen').style.display = 'none';
             document.getElementById('selection-container').style.display = 'none';
             document.getElementById('order-screen').style.display = 'block';
             loadMenu();
             lucide.createIcons();
+            // Auto-init VAD when entering the order screen
+            initVAD();
         }
 
         async function loadMenu() {
@@ -485,7 +566,6 @@
                 const menuData = await res.json();
                 renderMenu(menuData);
             } catch (err) {
-                console.error('Failed to load menu:', err);
                 document.getElementById('menu-items-container').innerHTML =
                     '<p style="color:#e74c3c;">Could not load menu.</p>';
             }
@@ -493,26 +573,23 @@
 
         function renderMenu(menuData) {
             const container = document.getElementById('menu-items-container');
-            // Group by category
             const categories = {};
             for (const [dish, info] of Object.entries(menuData)) {
                 const cat = info.category || 'Other';
                 if (!categories[cat]) categories[cat] = [];
                 categories[cat].push({ name: dish, price: info.price });
             }
-
             let html = '';
             for (const [cat, items] of Object.entries(categories)) {
-                const emoji = CATEGORY_EMOJIS[cat] || '🍽️';
-                html += `<div class="menu-category">`;
-                html += `<div class="category-header">${emoji} ${cat}</div>`;
-                html += `<div class="menu-grid">`;
-                items.forEach((item) => {
-                    html += `
-                        <div class="menu-item-card">
-                            <div class="menu-item-name">${item.name}</div>
-                            <div class="menu-item-price">₹${item.price}</div>
-                        </div>`;
+                const emoji = CATEGORY_EMOJIS[cat] || '&#x1F37D;';
+                html += `<div class="menu-category">
+                    <div class="category-header">${emoji} ${cat}</div>
+                    <div class="menu-grid">`;
+                items.forEach(item => {
+                    html += `<div class="menu-item-card">
+                        <div class="item-name">${item.name}</div>
+                        <div class="item-price">&#x20B9;${item.price}</div>
+                    </div>`;
                 });
                 html += `</div></div>`;
             }
@@ -520,78 +597,199 @@
         }
 
         function goBack() {
+            stopVAD();
             document.getElementById('order-screen').style.display = 'none';
             document.getElementById('selection-container').style.display = '';
             document.getElementById('table-screen').style.display = 'flex';
         }
 
-        const micBtn = document.getElementById('mic-btn');
-        const micContainer = document.getElementById('mic-container');
-        const transcriptText = document.getElementById('transcript');
-        const assistantReply = document.getElementById('assistant-reply');
-
-        micBtn.onclick = async () => {
-            if (!isRecording) startRecording();
-            else stopRecording();
-        };
-
-        async function startRecording() {
+        // ─── VAD Core ─────────────────────────────────────────────────────
+        async function initVAD() {
+            if (vadActive) return;
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(stream);
-                audioChunks = [];
-                mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
-                mediaRecorder.onstop = () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                    sendAudio(audioBlob);
-                };
-                mediaRecorder.start();
-                isRecording = true;
-                document.getElementById('order-screen').classList.add('recording');
-                transcriptText.innerText = "Syncing with voice...";
-                assistantReply.innerText = "I'm Listening...";
+                micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 256;
+                const source = audioCtx.createMediaStreamSource(micStream);
+                source.connect(analyser);
+
+                vadActive = true;
+                setVADStatus('active');
+                monitorVolume();
+
             } catch (err) {
-                alert("Microphone access denied.");
+                alert("Microphone access denied. VAD requires mic permission.");
             }
         }
 
-        function stopRecording() {
-            mediaRecorder.stop();
-            isRecording = false;
+        function stopVAD() {
+            vadActive = false;
+            if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
+            if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+            if (isSpeaking && mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+            if (micStream) micStream.getTracks().forEach(t => t.stop());
+            if (audioCtx) audioCtx.close();
+            micStream = null;
+            audioCtx = null;
+            analyser = null;
+            isSpeaking = false;
+            isProcessing = false;
             document.getElementById('order-screen').classList.remove('recording');
-            transcriptText.innerText = "Analyzing...";
+            micBtn.classList.remove('vad-on');
+            setVADStatus('off');
         }
 
+        function monitorVolume() {
+            if (!vadActive || !analyser) return;
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+            function tick() {
+                if (!vadActive) return;
+                animFrameId = requestAnimationFrame(tick);
+
+                analyser.getByteFrequencyData(dataArray);
+                const rms = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+
+                if (rms > SPEECH_THRESHOLD) {
+                    // ── Speech volume detected ──
+                    if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+                    if (!isSpeaking && !isProcessing) {
+                        onSpeechStart();
+                    }
+                } else {
+                    // ── Silence detected ──
+                    if (isSpeaking && !silenceTimer) {
+                        silenceTimer = setTimeout(onSpeechEnd, SILENCE_DURATION);
+                    }
+                }
+            }
+            tick();
+        }
+
+        function onSpeechStart() {
+            isSpeaking = true;
+            audioChunks = [];
+
+            mediaRecorder = new MediaRecorder(micStream);
+            mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(audioChunks, { type: 'audio/wav' });
+                sendAudio(blob);
+            };
+            mediaRecorder.start(100);  // collect in 100ms chunks
+
+            document.getElementById('order-screen').classList.add('recording');
+            setVADStatus('listening');
+            transcriptEl.innerText = "Listening...";
+            replyEl.innerText = "I'm listening...";
+        }
+
+        function onSpeechEnd() {
+            if (!isSpeaking) return;
+            isSpeaking = false;
+            isProcessing = true;   // lock VAD
+            silenceTimer = null;
+
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();   // triggers onstop -> sendAudio
+            }
+
+            document.getElementById('order-screen').classList.remove('recording');
+            setVADStatus('processing');
+            transcriptEl.innerText = "Processing...";
+        }
+
+        // ─── API Calls ────────────────────────────────────────────────────
         async function sendAudio(blob) {
             try {
-                const transcribeData = new FormData();
-                transcribeData.append('audio', blob, 'recording.wav');
-
-                const tResponse = await fetch(`${API_URL}/order/transcribe`, { method: 'POST', body: transcribeData });
-                const tResult = await tResponse.json();
+                // Step 1: Transcribe
+                const tForm = new FormData();
+                tForm.append('audio', blob, 'recording.wav');
+                const tRes = await fetch(`${API_URL}/order/transcribe`, { method: 'POST', body: tForm });
+                const tResult = await tRes.json();
 
                 if (tResult.transcript) {
-                    transcriptText.innerText = `"${tResult.transcript}"`;
+                    transcriptEl.innerText = `"${tResult.transcript}"`;
 
-                    const classifyData = new FormData();
-                    classifyData.append('transcript', tResult.transcript);
-                    classifyData.append('table_id', currentTableId);
+                    // Step 2: Classify / LLM
+                    const cForm = new FormData();
+                    cForm.append('transcript', tResult.transcript);
+                    cForm.append('table_id', currentTableId);
+                    const cRes = await fetch(`${API_URL}/order/classify`, { method: 'POST', body: cForm });
+                    const cResult = await cRes.json();
 
-                    const cResponse = await fetch(`${API_URL}/order/classify`, { method: 'POST', body: classifyData });
-                    const cResult = await cResponse.json();
+                    replyEl.innerText = cResult.response_text || "Order updated!";
 
-                    assistantReply.innerText = cResult.response_text || "Order updated!";
-                    if (cResult.speech) { new Audio(`data:audio/wav;base64,${cResult.speech}`).play(); }
+                    if (cResult.speech) {
+                        // Wait for TTS to finish before unlocking VAD
+                        const audio = new Audio(`data:audio/wav;base64,${cResult.speech}`);
+                        audio.onended = () => { isProcessing = false; setVADStatus('active'); };
+                        audio.onerror = () => { isProcessing = false; setVADStatus('active'); };
+                        audio.play();
+                    } else {
+                        isProcessing = false;
+                        setVADStatus('active');
+                    }
+
                 } else {
-                    transcriptText.innerText = "No speech detected.";
-                    assistantReply.innerText = "Sorry, I didn't catch that. Could you repeat?";
+                    transcriptEl.innerText = "No speech detected.";
+                    replyEl.innerText = "Sorry, I didn't catch that. Could you repeat?";
+                    isProcessing = false;
+                    setVADStatus('active');
                 }
             } catch (err) {
                 console.error(err);
-                transcriptText.innerText = "Error processing.";
+                transcriptEl.innerText = "Error processing.";
+                isProcessing = false;
+                setVADStatus('active');  // always unlock on error
             }
         }
 
+        // ─── Mic Button = VAD Toggle ──────────────────────────────────────
+        micBtn.onclick = async () => {
+            if (!vadActive) {
+                await initVAD();
+                micBtn.classList.add('vad-on');
+                transcriptEl.innerText = "Say something...";
+            } else {
+                stopVAD();
+                transcriptEl.innerText = "Tap mic to restart.";
+                replyEl.innerText = "Microphone off.";
+            }
+        };
+
+        // ─── VAD UI Status Helper ─────────────────────────────────────────
+        function setVADStatus(state) {
+            vadStatusEl.className = 'vad-status';
+            switch (state) {
+                case 'active':
+                    vadStatusEl.className += ' active';
+                    vadStatusEl.innerHTML = '&#x25cf; VAD ACTIVE &mdash; Waiting for speech';
+                    micLabel.innerText = 'TAP TO STOP LISTENING';
+                    micBtn.classList.add('vad-on');
+                    break;
+                case 'listening':
+                    vadStatusEl.className += ' listening';
+                    vadStatusEl.innerHTML = '&#x1F3A4; RECORDING...';
+                    micLabel.innerText = 'SPEAKING...';
+                    break;
+                case 'processing':
+                    vadStatusEl.className += ' processing';
+                    vadStatusEl.innerHTML = '&#x23F3; PROCESSING...';
+                    micLabel.innerText = 'WAIT FOR REPLY';
+                    break;
+                default:  // 'off'
+                    vadStatusEl.innerHTML = '&#x25cf; VAD OFF';
+                    micLabel.innerText = 'TAP TO START LISTENING';
+                    micBtn.classList.remove('vad-on');
+                    break;
+            }
+        }
+
+        // ─── Order Submission ─────────────────────────────────────────────
         async function finishOrder() {
             if (!confirm(`Finalize your order for Table ${currentTableId}?`)) return;
             const res = await fetch(`${API_URL}/order/submit?table_id=${currentTableId}`, { method: 'POST' });

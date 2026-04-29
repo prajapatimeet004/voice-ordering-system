@@ -388,14 +388,20 @@
                 document.getElementById('stat-pending').textContent = stats.active_orders || 0;
                 document.getElementById('stat-revenue').textContent = '₹' + (stats.revenue || 0);
 
-                const cur = new Set(Object.keys(states).filter(k => Object.keys(states[k].confirmed || {}).length));
+                // Detect active tables: either have confirmed items OR a pending confirmation
+                const cur = new Set(Object.keys(states).filter(k => {
+                    const hasConfirmed = Object.keys(states[k].confirmed || {}).length > 0;
+                    const hasPending = !!states[k].pending_confirmation;
+                    return hasConfirmed || hasPending;
+                }));
+
                 for (const k of cur) {
                     if (!prevOrderKeys.has(k)) {
                         orderStatuses[k] = orderStatuses[k] || 'new';
                         orderTimestamps[k] = orderTimestamps[k] || Date.now();
                         checkedItems[k] = checkedItems[k] || new Set();
                         playBeep();
-                        showToast(`🔔 New order — Table ${k.replace('table_', '')}`);
+                        showToast(`🔔 New activity — Table ${k.replace('table_', '')}`);
                     }
                 }
                 for (const k of prevOrderKeys) {
@@ -428,7 +434,12 @@
         // ── RENDER
         function renderGrid(allStates) {
             const grid = document.getElementById('kds-grid');
-            const active = Object.entries(allStates).filter(([, s]) => Object.keys(s.confirmed || {}).length > 0);
+            // Filter states that have either confirmed items or a pending confirmation
+            const active = Object.entries(allStates).filter(([k, s]) => {
+                const hasConfirmed = Object.keys(s.confirmed || {}).length > 0;
+                const hasPending = !!s.pending_confirmation;
+                return hasConfirmed || hasPending;
+            });
             const filtered = active.filter(([k]) => {
                 if (currentFilter === 'all') return true;
                 return (orderStatuses[k] || 'new') === currentFilter;
@@ -456,11 +467,14 @@
                 return getElapsed(b) - getElapsed(a);
             });
 
-            grid.innerHTML = filtered.map(([tid, state]) => buildCard(tid, state.confirmed)).join('');
+            grid.innerHTML = filtered.map(([tid, state]) => buildCard(tid, state)).join('');
             lucide.createIcons();
         }
 
-        function buildCard(tableId, confirmed) {
+        function buildCard(tableId, state) {
+            const confirmed = state.confirmed || {};
+            const pending = state.pending_confirmation;
+
             const status = orderStatuses[tableId] || 'new';
             const elapsed = getElapsed(tableId);
             const urgent = elapsed > 600;
@@ -502,6 +516,22 @@
         </div>`;
             }).join('');
 
+            // Add Pending Item if exists
+            let pendingHtml = '';
+            if (pending) {
+                const pQty = pending.quantity || 1;
+                const pName = pending.suggested || pending.original;
+                pendingHtml = `
+               <div class="p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 border-dashed mb-2 flex items-start gap-3 animate-pulse">
+                   <div class="w-7 h-7 rounded-lg bg-amber-500/20 flex items-center justify-center text-amber-500 text-xs font-black flex-shrink-0">${pQty}</div>
+                   <div class="flex-1 min-w-0">
+                       <div class="font-bold text-sm text-amber-200/70 italic">${pName}</div>
+                       <div class="text-[10px] text-amber-500/60 font-bold uppercase tracking-tighter">Waiting for user confirmation...</div>
+                   </div>
+                   <i data-lucide="help-circle" class="w-4 h-4 text-amber-500/50 mt-1"></i>
+               </div>`;
+            }
+
             const footerBtns = status === 'ready'
                 ? `<button onclick="markServed('${tableId}')"
               class="flex-1 py-2.5 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-black text-sm flex items-center justify-center gap-2 hover:bg-emerald-500 hover:text-white transition-all">
@@ -541,7 +571,10 @@
         </div>
 
         <!-- Items -->
-        <div class="p-4 flex-1">${itemsHtml}</div>
+        <div class="p-4 flex-1">
+            ${itemsHtml}
+            ${pendingHtml}
+        </div>
 
         <!-- Footer -->
         <div class="px-4 pb-4 flex gap-2">${footerBtns}</div>
