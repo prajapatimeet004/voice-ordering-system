@@ -628,8 +628,19 @@
             });
         }, 1000);
 
-        // ── POLL
-        setInterval(fetchAll, 3000);
+        // ── EVENT STREAM (SSE)
+        const eventSource = new EventSource(`${API}/dashboard/stream`);
+        eventSource.onmessage = function (event) {
+            if (event.data === 'update') {
+                fetchAll();
+            } else if (event.data === 'connected') {
+                console.log("SSE Connected");
+            }
+        };
+        eventSource.onerror = function (err) {
+            console.error("SSE Error", err);
+        };
+
         window.onload = fetchAll;
     </script>
 

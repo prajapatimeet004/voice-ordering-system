@@ -41,6 +41,27 @@ def load_menu():
 
 MENU_DATA = load_menu()
 
+from fastapi import WebSocket, WebSocketDisconnect
+from fastapi.responses import StreamingResponse
+import asyncio
+
+class DashboardManager:
+    def __init__(self):
+        self.queues = []
+    def add_queue(self):
+        q = asyncio.Queue()
+        self.queues.append(q)
+        return q
+    def remove_queue(self, q):
+        if q in self.queues:
+            self.queues.remove(q)
+    async def broadcast(self):
+        for q in self.queues:
+            await q.put(True)
+
+dashboard_manager = DashboardManager()
+
+
 app = FastAPI(title="Voice Ordering System API")
 
 # Multi-table state management
@@ -149,6 +170,23 @@ async def get_dashboard_stats(table_id: Optional[str] = None):
     }
 
 
+
+
+@app.get("/dashboard/stream")
+async def dashboard_stream():
+    async def event_generator():
+        q = dashboard_manager.add_queue()
+        try:
+            yield "data: connected\n\n"
+            while True:
+                await q.get()
+                yield "data: update\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            dashboard_manager.remove_queue(q)
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 @app.get("/order/state")
 async def get_order_state(table_id: str = "default"):
     """Returns the current order state for a specific table."""
@@ -200,7 +238,9 @@ async def transcribe(audio: UploadFile = File(...), noise_profile: Optional[Uplo
         safe_remove(tmp_audio_path)
 
 @app.post("/order/classify")
-async def classify(transcript: str = Form(...), table_id: str = Form("default")):
+async def process_order_logic(transcript: str, table_id: str):
+    current_order_state = get_table_state(table_id)
+    # DELETED FOR EXTRACTION
     """
     Classifies a transcript and returns structured order data + TTS response.
     Now handles corrections (like removal) first.
@@ -396,7 +436,14 @@ async def classify(transcript: str = Form(...), table_id: str = Form("default"))
                     
                     # Update quantity if present
                     if "quantity" in changes:
-                        existing["quantity"] = int(changes.pop("quantity"))
+                        qty_val = changes.pop("quantity")
+                        if isinstance(qty_val, int) or str(qty_val).isdigit():
+                            existing["quantity"] = int(qty_val)
+                        elif str(qty_val).lower() == "increase":
+                            existing["quantity"] += 1
+                        elif str(qty_val).lower() == "decrease":
+                            existing["quantity"] = max(1, existing["quantity"] - 1)
+                        # Ignore other unrecognized string values for quantity
                     
                     # Use merge_structured_addons for all other changes (which are assumed to be addons)
                     if changes:
@@ -450,6 +497,7 @@ async def classify(transcript: str = Form(...), table_id: str = Form("default"))
             except Exception as e:
                 print(f"Server playback error: {e}")
 
+        asyncio.create_task(dashboard_manager.broadcast())
         return {
             "classification": result,
             "response_text": response_text,
@@ -532,6 +580,7 @@ async def submit_order(table_id: str = "default"):
     # Reset state after submission
     current_order_state["confirmed"] = {}
     current_order_state["pending_confirmation"] = None
+    asyncio.create_task(dashboard_manager.broadcast())
     
     return {
         "message": "Order submitted successfully!",
@@ -562,6 +611,54 @@ async def toggle_availability(dish_name: str = Form(...), available: bool = Form
     else:
         raise HTTPException(status_code=404, detail=f"Dish '{dish_name}' not found in inventory.")
 
+
+@app.websocket("/order/stream_audio")
+async def ws_stream_audio(websocket: WebSocket, table_id: str = "default"):
+    await websocket.accept()
+    audio_chunks = []
+    
+    try:
+        while True:
+            message = await websocket.receive()
+            if "text" in message:
+                import json
+                try:
+                    data = json.loads(message["text"])
+                    if data.get("action") == "start":
+                        audio_chunks = []
+                        table_id = data.get("table_id", table_id)
+                    elif data.get("action") == "stop":
+                        if audio_chunks:
+                            import tempfile
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp_audio:
+                                for chunk in audio_chunks:
+                                    tmp_audio.write(chunk)
+                                tmp_audio_path = tmp_audio.name
+                            try:
+                                from ordering_workflow import transcribe_audio
+                                transcript, processed_audio_bytes, _ = await transcribe_audio(tmp_audio_path)
+                                if transcript:
+                                    result = await classify(transcript, table_id)
+                                    result["transcript"] = transcript
+                                    await websocket.send_json(result)
+                                else:
+                                    await websocket.send_json({"error": "No speech detected.", "transcript": ""})
+                            except Exception as e:
+                                print(f"Processing error in WS: {e}")
+                                await websocket.send_json({"classification": {}, "response_text": f"Error: {e}", "is_finished": False, "transcript": "", "error": str(e)})
+                            finally:
+                                from audio_utils import safe_remove
+                                safe_remove(tmp_audio_path)
+                                audio_chunks = []
+                        else:
+                            await websocket.send_json({"error": "No audio chunks received"})
+                except Exception as e:
+                    print(f"WS text error: {e}")
+            elif "bytes" in message:
+                audio_chunks.append(message["bytes"])
+    except WebSocketDisconnect:
+        pass
+
 if __name__ == "__main__":
     import uvicorn
     import webbrowser
@@ -578,3 +675,4 @@ if __name__ == "__main__":
 
     # Use string import path to enable reload
     uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True, reload_dirs=["."])
+

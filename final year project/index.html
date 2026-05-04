@@ -533,6 +533,7 @@
         let audioCtx = null;
         let analyser = null;
         let animFrameId = null;
+        let audioWs = null;
 
         // ─── UI Elements ────────────────────────────────────────────────
         const micBtn = document.getElementById('mic-btn');
@@ -671,15 +672,49 @@
 
         function onSpeechStart() {
             isSpeaking = true;
-            audioChunks = [];
-
-            mediaRecorder = new MediaRecorder(micStream);
-            mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
-            mediaRecorder.onstop = () => {
-                const blob = new Blob(audioChunks, { type: 'audio/wav' });
-                sendAudio(blob);
+            
+            // Open WebSocket Connection
+            let wsUrl = API_URL.replace("http", "ws");
+            if (wsUrl === "file://") { wsUrl = "ws://127.0.0.1:8000"; }
+            
+            audioWs = new WebSocket(`${wsUrl}/order/stream_audio`);
+            
+            audioWs.onopen = () => {
+                audioWs.send(JSON.stringify({ action: "start", table_id: currentTableId }));
+                
+                mediaRecorder = new MediaRecorder(micStream);
+                mediaRecorder.ondataavailable = e => { 
+                    if (e.data.size > 0 && audioWs.readyState === WebSocket.OPEN) {
+                        audioWs.send(e.data); // Stream directly
+                    } 
+                };
+                mediaRecorder.start(100); 
             };
-            mediaRecorder.start(100);  // collect in 100ms chunks
+            
+            audioWs.onmessage = (e) => {
+                const cResult = JSON.parse(e.data);
+                if (cResult.error) {
+                    transcriptEl.innerText = "Error: " + cResult.error;
+                    replyEl.innerText = "Sorry, error processing.";
+                    isProcessing = false; setVADStatus('active');
+                    return;
+                }
+                if (cResult.transcript) transcriptEl.innerText = `"${cResult.transcript}"`;
+                replyEl.innerText = cResult.response_text || "Order updated!";
+                if (cResult.speech) {
+                    const audio = new Audio(`data:audio/wav;base64,${cResult.speech}`);
+                    audio.onended = () => { isProcessing = false; setVADStatus('active'); };
+                    audio.onerror = () => { isProcessing = false; setVADStatus('active'); };
+                    audio.play();
+                } else {
+                    isProcessing = false; setVADStatus('active');
+                }
+            };
+            
+            audioWs.onerror = (err) => {
+                console.error("WS Error", err);
+                isProcessing = false; setVADStatus('active');
+            };
 
             document.getElementById('order-screen').classList.add('recording');
             setVADStatus('listening');
@@ -690,11 +725,14 @@
         function onSpeechEnd() {
             if (!isSpeaking) return;
             isSpeaking = false;
-            isProcessing = true;   // lock VAD
+            isProcessing = true;   
             silenceTimer = null;
 
             if (mediaRecorder && mediaRecorder.state === 'recording') {
-                mediaRecorder.stop();   // triggers onstop -> sendAudio
+                mediaRecorder.stop();
+            }
+            if (audioWs && audioWs.readyState === WebSocket.OPEN) {
+                audioWs.send(JSON.stringify({ action: "stop" }));
             }
 
             document.getElementById('order-screen').classList.remove('recording');

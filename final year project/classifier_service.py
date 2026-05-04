@@ -930,15 +930,30 @@ Goal: Act like a smart Indian waiter who understands any language mix, never mis
         llm_start = time.perf_counter()
         
         # Run LLM call using Cerebras
-        completion = await client.chat.completions.create(
-            model="qwen-3-235b-a22b-instruct-2507",
-            messages=[
-                {"role": "system", "content": system_prompt_template},
-                {"role": "user", "content": f"{hint_prompt}User Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}"}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.1
-        )
+        try:
+            completion = await client.chat.completions.create(
+                model="qwen-3-235b-a22b-instruct-2507",
+                messages=[
+                    {"role": "system", "content": system_prompt_template},
+                    {"role": "user", "content": f"{hint_prompt}Current Order Summary: {current_order_summary}\n\nUser Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}"}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.1
+            )
+        except Exception as e:
+            if "429" in str(e) or "queue" in str(e) or "too_many_requests" in str(e):
+                print(f"Cerebras Qwen 429 Error, falling back to llama3.1-8b: {e}")
+                completion = await client.chat.completions.create(
+                    model="llama3.1-8b",
+                    messages=[
+                        {"role": "system", "content": system_prompt_template},
+                        {"role": "user", "content": f"{hint_prompt}Current Order Summary: {current_order_summary}\n\nUser Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}"}
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.1
+                )
+            else:
+                raise e
         
         text_content = completion.choices[0].message.content
         llm_end = time.perf_counter()
