@@ -97,10 +97,27 @@ def extract_json(text):
         text = match.group(1)
     else:
         # 3. If no markdown, find the first '{'/'[' and last '}'/']'
-        # Support both JSON objects and arrays
-        match = re.search(r'([\{\[].*[\}\]])', text, re.DOTALL)
-        if match:
-            text = match.group(1)
+        # Use a more careful approach to handle trailing hallucinations
+        brace_start = text.find('{')
+        bracket_start = text.find('[')
+        
+        start_idx = -1
+        if brace_start != -1 and bracket_start != -1:
+            start_idx = min(brace_start, bracket_start)
+        else:
+            start_idx = brace_start if brace_start != -1 else bracket_start
+            
+        if start_idx != -1:
+            # Find the last brace/bracket that might be part of the actual JSON
+            # instead of blindly taking the last character of the string
+            last_brace = text.rfind('}')
+            last_bracket = text.rfind(']')
+            end_idx = max(last_brace, last_bracket)
+            
+            if end_idx > start_idx:
+                text = text[start_idx:end_idx+1]
+            else:
+                text = text[start_idx:]
         else:
             text = text.strip()
             
@@ -585,7 +602,7 @@ def fuzzy_match_dish(dish_name: str):
 CLASSIFICATION_SCHEMA = {
     "type": "OBJECT",
     "properties": {
-        "intent": {"type": "STRING", "enum": ["new_order", "modify_order", "affirmative", "negative", "finishing"], "description": "Type of intent extracted"},
+        "intent": {"type": "STRING", "enum": ["new_order", "modify_order", "affirmative", "negative", "finishing", "recommendation", "question", "none"], "description": "Type of intent extracted"},
         "items": {
             "type": "ARRAY",
             "items": {
@@ -621,7 +638,7 @@ CLASSIFICATION_SCHEMA = {
 }
 
 
-async def classify_order(transcript: str, current_order_summary: str = "Order is empty"):
+async def classify_order(transcript: str, current_order_summary: str = "Order is empty", history: list = None):
     from correction_service import get_correction_hints
 
     """
@@ -641,7 +658,22 @@ async def classify_order(transcript: str, current_order_summary: str = "Order is
     system_prompt_template = """
 🎯 SYSTEM PROMPT: Multilingual Indian Food Voice Agent
 
-You are an intelligent voice-based restaurant ordering assistant designed for Indian users. Your primary goal is to accurately understand customer orders across multiple languages and extract structured order information.
+You are an intelligent voice-based restaurant ordering assistant designed for Indian users. Your primary goal is to accurately understand customer orders, answer general restaurant questions, and provide smart recommendations based on the menu and conversation history.
+
+---
+
+### 🏛️ RESTAURANT INFORMATION
+{RESTAURANT_INFO}
+
+---
+
+### 🥣 MENU CATEGORIES & RECOMMENDATIONS
+{MENU_CATEGORIES}
+
+---
+
+### 🕒 CONVERSATION HISTORY (Last 10 turns)
+{CONVERSATION_HISTORY}
 
 ---
 
@@ -725,6 +757,7 @@ Map all inputs to a standardized menu item name from the AVAILABLE MENU above.
 
 ### ➕ 3. Add-on / Customization Extraction
 Extract modifications (addons) from user input.
+- Common Addons: "butter", "cheese", "spicy", "sambar", "chutney", "ghee", "papad", "salad", "extra"
 - Quantity changes: "extra", "double", "more", "vadhu", "zyada"
 - Reduction: "less", "light", "ocha", "kam"
 - Removal: "no", "without", "nahi", "vina"
@@ -849,6 +882,23 @@ Output: {
   "language_code": "hi-IN"
 }
 
+#### Case K: Existing Item Addon Update (Sambar/Chutney)
+Input: "Idli mein teekha mat rakhna, Idli mein extra sambhar do."
+Current Order Summary: "1x Idli"
+Output: {
+  "intent": "modify_order",
+  "items": [],
+  "modifications": [
+    {
+      "target_item": "Idli",
+      "action": "update",
+      "changes": { "spicy": "remove", "sambar": "increase" }
+    }
+  ],
+  "response_text": "Saras! Idli teekhu nahi rahe ane extra sambhar add kari didhu che.",
+  "language_code": "gu-IN"
+}
+
 #### Case H: Affirmative Confirmation
 Input: "Yes", "Haan", "Ha", "Theek hai", "Sure","done","ok","haan ji","haan ji done","kari do","kari lo","kari lo done","kari lo done ji","haan ji done ji"
 Output: {
@@ -893,10 +943,28 @@ Output: {
   "language_code": "hi-IN"
 }
 
-Goal: Act like a smart Indian waiter who understands any language mix, never misses customization, and handles corrections naturally.
+#### Case L: General Question / Recommendation
+Input: "What do you have for breakfast?" or "Opening hours kya hai?"
+Output: {
+  "intent": "recommendation",
+  "items": [],
+  "modifications": [],
+  "response_text": "Amara pase breakfast ma Masala Dosa, Idli ane Vada che. Ame savare 11 vagya thi sharu kariye chhiye.",
+  "language_code": "gu-IN"
+}
+
+Goal: Act like a smart Indian waiter. If asked a question, use intent 'question' or 'recommendation'.
 """
 
-    system_prompt = system_prompt_template.replace("{AVAILABLE_MENU}", ", ".join(INDIAN_MENU)).replace("{INVENTORY_STATUS}", inventory_summary)
+    history_str = "\n".join([f"- {h}" for h in (history or [])]) if history else "No previous history."
+    
+    restaurant_info = "Pooja Restaurant (Ahmedabad). Open 11AM-11PM. Specialties: Dosa, Butter Chicken. Accepts UPI/Cash. Facilities: Wi-Fi, Parking."
+
+    system_prompt = system_prompt_template.replace("{AVAILABLE_MENU}", ", ".join(INDIAN_MENU)) \
+                                         .replace("{INVENTORY_STATUS}", inventory_summary) \
+                                         .replace("{MENU_CATEGORIES}", categories_summary) \
+                                         .replace("{RESTAURANT_INFO}", restaurant_info) \
+                                         .replace("{CONVERSATION_HISTORY}", history_str)
 
 
 
@@ -972,7 +1040,7 @@ Goal: Act like a smart Indian waiter who understands any language mix, never mis
             )
 
         text_content = completion.choices[0].message.content
-        # print(f"DEBUG LLM Raw: {text_content}") # Silencing reasoning process
+        print(f"DEBUG LLM Raw: {text_content}")  # Log raw response for debugging
         cleaned_json = extract_json(text_content)
         parsed_data = json.loads(cleaned_json)
 

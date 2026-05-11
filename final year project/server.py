@@ -1,3 +1,5 @@
+import logging
+logging.basicConfig(filename='ws_debug.log', level=logging.DEBUG)
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -72,6 +74,7 @@ def create_default_table_state():
         "confirmed": {},
         "pending_confirmation": None,
         "last_response": "",
+        "transcript_history": [],
         "stats": {
             "active_orders": 0,
             "revenue": 0.0,
@@ -248,12 +251,22 @@ async def process_order_logic(transcript: str, table_id: str):
     current_order_state = get_table_state(table_id)
     try:
         # --- Unified Classification ---
+        # Store transcript in history
+        current_order_state["transcript_history"].append(transcript)
+        # Only keep last 10 entries to avoid context bloating
+        if len(current_order_state["transcript_history"]) > 10:
+            current_order_state["transcript_history"] = current_order_state["transcript_history"][-10:]
+
         # Prepare order summary for LLM context
         confirmed_list = [f"{v['quantity']} {d}" for d, v in current_order_state["confirmed"].items()]
         order_summary = ", ".join(confirmed_list) if confirmed_list else "Order is empty"
 
-        # Call the unified classifier
-        result = await classify_order(transcript, order_summary)
+        # Call the unified classifier with history context
+        result = await classify_order(
+            transcript, 
+            order_summary, 
+            history=current_order_state["transcript_history"]
+        )
 
         
         # --- Conversational Logic ---
@@ -354,6 +367,8 @@ async def process_order_logic(transcript: str, table_id: str):
                 dish_already_exists = dish_name in current_order_state["confirmed"]
                 has_addition_keywords = any(kw in transcript.lower() for kw in ADDITION_KEYWORDS)
 
+                print(f"DEBUG: [ITEM] '{dish_name}' exists={dish_already_exists} add_kw={has_addition_keywords} modified_addons={modified_addons} addons={addons}")
+
                 if dish_already_exists and not has_addition_keywords:
                     # Treat as update even if LLM said it's a new item (Secondary Guard)
                     existing = current_order_state["confirmed"][dish_name]
@@ -361,13 +376,26 @@ async def process_order_logic(transcript: str, table_id: str):
                         # Use structured addon merging if LLM gave us a dict
                         current_addons = existing.get("addons", [])
                         existing["addons"] = merge_structured_addons(current_addons, modified_addons)
-                        print(f"DEBUG: [GUARD] Merged addons for existing '{dish_name}': {existing['addons']}")
+                        print(f"DEBUG: [GUARD] Updated addons for existing '{dish_name}' via modified_addons: {existing['addons']}")
                     elif addons:
-                        # Fallback: simple list merge
-                        existing["addons"] = list(set(existing.get("addons", []) + addons))
-                        print(f"DEBUG: [GUARD] Merged addons (list) for existing '{dish_name}': {existing['addons']}")
+                        # Fallback: parse "key: value" strings into structured dict before merging
+                        parsed_addon_dict = {}
+                        plain_addons = []
+                        for a in addons:
+                            if isinstance(a, str) and ":" in a:
+                                k, v = a.split(":", 1)
+                                parsed_addon_dict[k.strip()] = v.strip()
+                            else:
+                                plain_addons.append(a)
+                        if parsed_addon_dict:
+                            current_addons = existing.get("addons", [])
+                            existing["addons"] = merge_structured_addons(current_addons, parsed_addon_dict)
+                            print(f"DEBUG: [GUARD] Updated addons for existing '{dish_name}' via parsed addons: {existing['addons']}")
+                        else:
+                            existing["addons"] = list(set(existing.get("addons", []) + plain_addons))
+                            print(f"DEBUG: [GUARD] Merged addons (list) for existing '{dish_name}': {existing['addons']}")
                     else:
-                        print(f"DEBUG: [GUARD] '{dish_name}' already in order, no new addition words found. Skipping.")
+                        print(f"DEBUG: [GUARD] '{dish_name}' already in order, no addons and no addition words — skipping.")
                     continue  # Do NOT add as new item
 
                 # Check Availability (only for genuinely new items)
@@ -620,9 +648,16 @@ async def ws_stream_audio(websocket: WebSocket, table_id: str = "default"):
     try:
         while True:
             message = await websocket.receive()
-            if "text" in message:
+            if message.get("type") == "websocket.disconnect":
+                logging.debug("WS Client disconnected.")
+                print("WS Client disconnected.")
+                break
+                
+            if message.get("text") is not None:
                 import json
                 try:
+                    logging.debug("Received WS TEXT: " + str(message["text"]))
+                    print("Received WS TEXT:", message["text"])
                     data = json.loads(message["text"])
                     if data.get("action") == "start":
                         audio_chunks = []
@@ -638,23 +673,63 @@ async def ws_stream_audio(websocket: WebSocket, table_id: str = "default"):
                                 from ordering_workflow import transcribe_audio
                                 transcript, processed_audio_bytes, _ = await transcribe_audio(tmp_audio_path)
                                 if transcript:
-                                    result = await classify(transcript, table_id)
-                                    result["transcript"] = transcript
-                                    await websocket.send_json(result)
+                                    # Fallback loop in case classify_order hits LLM rate limits
+                                    result = None
+                                    for attempt in range(3):
+                                        try:
+                                            result = await process_order_logic(transcript, table_id)
+                                            break
+                                        except Exception as classify_err:
+                                            if "429" in str(classify_err) and attempt < 2:
+                                                wait_time = (attempt + 1) * 3
+                                                logging.warning(f"Rate limit 429 hit, retrying classify in {wait_time}s")
+                                                await asyncio.sleep(wait_time)
+                                            else:
+                                                raise classify_err
+                                    if result:
+                                        result["transcript"] = transcript
+                                        try:
+                                            await websocket.send_json(result)
+                                        except (WebSocketDisconnect, RuntimeError) as e:
+                                            logging.info(f"WS Client disconnected during result delivery: {e}")
+                                            break
+                                    else:
+                                        try:
+                                            await websocket.send_json({"error": "Classification failed.", "transcript": transcript})
+                                        except: break
                                 else:
-                                    await websocket.send_json({"error": "No speech detected.", "transcript": ""})
+                                    try:
+                                        await websocket.send_json({"error": "No speech detected.", "transcript": ""})
+                                    except: break
                             except Exception as e:
+                                logging.error(f"Processing error in WS: {e}")
                                 print(f"Processing error in WS: {e}")
-                                await websocket.send_json({"classification": {}, "response_text": f"Error: {e}", "is_finished": False, "transcript": "", "error": str(e)})
+                                # Only attempt to send error if socket is still open
+                                try:
+                                    await websocket.send_json({
+                                        "classification": {}, 
+                                        "response_text": f"Error: {e}", 
+                                        "is_finished": False, 
+                                        "transcript": "", 
+                                        "error": str(e)
+                                    })
+                                except:
+                                    logging.warning("Could not send error response: Client likely disconnected.")
+                                    break
                             finally:
                                 from audio_utils import safe_remove
                                 safe_remove(tmp_audio_path)
                                 audio_chunks = []
                         else:
-                            await websocket.send_json({"error": "No audio chunks received"})
+                            try:
+                                await websocket.send_json({"error": "No audio chunks received"})
+                            except: break
                 except Exception as e:
+                    logging.error(f"WS text error: {e}")
                     print(f"WS text error: {e}")
-            elif "bytes" in message:
+            elif message.get("bytes") is not None:
+                logging.debug(f"Received WS BYTES size: {len(message['bytes'])}")
+                print(f"Received WS BYTES size: {len(message['bytes'])}")
                 audio_chunks.append(message["bytes"])
     except WebSocketDisconnect:
         pass
