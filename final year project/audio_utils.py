@@ -113,10 +113,20 @@ def trim_silence(input_wav, output_wav):
     
     # Ensure models are loaded
     model_vad, utils = get_vad_model()
-    (get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks) = utils
+    (get_speech_timestamps, _, _, _, collect_chunks) = utils
     
     # Read audio for VAD (must be 16kHz)
-    wav = read_audio(input_wav, sampling_rate=16000)
+    import soundfile as sf
+    import torch
+    try:
+        data, sr = sf.read(input_wav, dtype='float32')
+        if data.ndim > 1:
+            data = data.mean(axis=1) # Convert to mono
+        # Convert to torch tensor
+        wav = torch.from_numpy(data)
+    except Exception as e:
+        print(f"Error reading audio with soundfile: {e}")
+        return False
     
     # Get speech timestamps
     speech_timestamps = get_speech_timestamps(wav, model_vad, sampling_rate=16000, threshold=0.6)
@@ -126,7 +136,8 @@ def trim_silence(input_wav, output_wav):
     
     # Collect speech chunks and save
     speech_data = collect_chunks(speech_timestamps, wav)
-    save_audio(output_wav, speech_data, sampling_rate=16000)
+    # Save using soundfile to avoid torchaudio.save segfaults
+    sf.write(output_wav, speech_data.numpy(), 16000)
     
     return True
 
@@ -176,7 +187,8 @@ def split_wav(filename, chunk_duration=20, noise_profile_bytes=None):
     for i, start in enumerate(range(0, len(audio), chunk_length_ms)):
         chunk = audio[start:start + chunk_length_ms]
         chunk_filename = os.path.abspath(f"chunk_{i}.wav")
-        chunk.export(chunk_filename, format="wav")
+        # Explicit parameters to ensure 16kHz 16-bit PCM for API logic downstream
+        chunk.export(chunk_filename, format="wav", parameters=["-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1"])
         chunks.append(chunk_filename)
         
     return chunks

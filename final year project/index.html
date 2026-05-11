@@ -672,45 +672,85 @@
 
         function onSpeechStart() {
             isSpeaking = true;
-            
+
+            if (audioWs && audioWs.readyState === WebSocket.OPEN) {
+                audioWs.close();
+            }
+
             // Open WebSocket Connection
             let wsUrl = API_URL.replace("http", "ws");
             if (wsUrl === "file://") { wsUrl = "ws://127.0.0.1:8000"; }
-            
+
             audioWs = new WebSocket(`${wsUrl}/order/stream_audio`);
-            
+
             audioWs.onopen = () => {
                 audioWs.send(JSON.stringify({ action: "start", table_id: currentTableId }));
-                
+
                 mediaRecorder = new MediaRecorder(micStream);
-                mediaRecorder.ondataavailable = e => { 
+                mediaRecorder.ondataavailable = e => {
                     if (e.data.size > 0 && audioWs.readyState === WebSocket.OPEN) {
                         audioWs.send(e.data); // Stream directly
-                    } 
+                    }
                 };
-                mediaRecorder.start(100); 
+                // onstop must be set BEFORE start() so it's ready when stop() fires
+                mediaRecorder.onstop = () => {
+                    console.log("MediaRecorder stopped, sending stop signal to server");
+                    if (audioWs && audioWs.readyState === WebSocket.OPEN) {
+                        audioWs.send(JSON.stringify({ action: "stop" }));
+                    } else {
+                        // WS closed before stop — unlock VAD
+                        console.warn("WS not open on onstop, unlocking VAD.");
+                        isProcessing = false;
+                        isSpeaking = false;
+                        setVADStatus('active');
+                    }
+                };
+                mediaRecorder.start(100);
             };
-            
+
+            // Safety timeout: if server never responds within 15s, unlock VAD
+            let wsResponseTimeout = setTimeout(() => {
+                console.warn("WS response timeout — unlocking VAD.");
+                isProcessing = false;
+                isSpeaking = false;
+                setVADStatus('active');
+                transcriptEl.innerText = "Timeout. Try again.";
+            }, 15000);
+
             audioWs.onmessage = (e) => {
-                const cResult = JSON.parse(e.data);
+                clearTimeout(wsResponseTimeout);
+                let cResult;
+                try { cResult = JSON.parse(e.data); } catch { return; }
+
+                // Always reset processing state first — then handle response
+                const unlockVAD = () => { isProcessing = false; isSpeaking = false; setVADStatus('active'); };
+
                 if (cResult.error) {
-                    transcriptEl.innerText = "Error: " + cResult.error;
-                    replyEl.innerText = "Sorry, error processing.";
-                    isProcessing = false; setVADStatus('active');
+                    // Server errors: no audio chunks, no speech, classification fail, etc.
+                    const errMsg = cResult.error;
+                    if (errMsg.includes('No audio') || errMsg.includes('No speech')) {
+                        transcriptEl.innerText = "No speech detected. Please try again.";
+                        replyEl.innerText = "Didn't catch that, try again.";
+                    } else {
+                        transcriptEl.innerText = "Error: " + errMsg;
+                        replyEl.innerText = "Sorry, could not process that.";
+                    }
+                    unlockVAD();
                     return;
                 }
+
                 if (cResult.transcript) transcriptEl.innerText = `"${cResult.transcript}"`;
                 replyEl.innerText = cResult.response_text || "Order updated!";
                 if (cResult.speech) {
                     const audio = new Audio(`data:audio/wav;base64,${cResult.speech}`);
-                    audio.onended = () => { isProcessing = false; setVADStatus('active'); };
-                    audio.onerror = () => { isProcessing = false; setVADStatus('active'); };
-                    audio.play();
+                    audio.onended = unlockVAD;
+                    audio.onerror = unlockVAD;
+                    audio.play().catch(unlockVAD);
                 } else {
-                    isProcessing = false; setVADStatus('active');
+                    unlockVAD();
                 }
             };
-            
+
             audioWs.onerror = (err) => {
                 console.error("WS Error", err);
                 isProcessing = false; setVADStatus('active');
@@ -725,14 +765,25 @@
         function onSpeechEnd() {
             if (!isSpeaking) return;
             isSpeaking = false;
-            isProcessing = true;   
+            isProcessing = true;
             silenceTimer = null;
 
             if (mediaRecorder && mediaRecorder.state === 'recording') {
+                // Flush any buffered audio data first, THEN stop
+                // This ensures all chunks arrive before onstop fires the "stop" signal
+                try { mediaRecorder.requestData(); } catch (e) { }
                 mediaRecorder.stop();
-            }
-            if (audioWs && audioWs.readyState === WebSocket.OPEN) {
+            } else if (audioWs && audioWs.readyState === WebSocket.OPEN) {
+                // Recorder never started or already stopped — send stop directly
                 audioWs.send(JSON.stringify({ action: "stop" }));
+            } else {
+                // Nothing to send — unlock immediately
+                console.warn("onSpeechEnd: no recorder or WS, unlocking VAD.");
+                isProcessing = false;
+                isSpeaking = false;
+                setVADStatus('active');
+                transcriptEl.innerText = "Ready.";
+                return;
             }
 
             document.getElementById('order-screen').classList.remove('recording');

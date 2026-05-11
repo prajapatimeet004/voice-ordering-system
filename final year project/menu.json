@@ -1,7 +1,8 @@
 {
     "Masala Dosa": {
         "category": "South Indian",
-        "price": 120
+        "price": 120,
+        "allowed_addons": ["cheese", "butter", "spicy", "chutney", "sambar"]
     },
     "Paneer Tikka": {
         "category": "Starters",
@@ -9,7 +10,8 @@
     },
     "Butter Chicken": {
         "category": "Main Course",
-        "price": 320
+        "price": 320,
+        "allowed_addons": ["spicy", "butter"]
     },
     "Chicken Biryani": {
         "category": "Main Course",
@@ -57,11 +59,13 @@
     },
     "Burger": {
         "category": "Fast Food",
-        "price": 120
+        "price": 120,
+        "allowed_addons": ["cheese", "mayo", "spicy"]
     },
     "Pizza": {
         "category": "Fast Food",
-        "price": 200
+        "price": 200,
+        "allowed_addons": ["cheese", "olives", "mushrooms", "spicy"]
     },
     "Gulab Jamun": {
         "category": "Dessert",
@@ -73,23 +77,28 @@
     },
     "Idli": {
         "category": "South Indian",
-        "price": 60
+        "price": 60,
+        "allowed_addons": ["sambar", "chutney", "spicy", "ghee", "butter"]
     },
     "Vada": {
         "category": "South Indian",
-        "price": 50
+        "price": 50,
+        "allowed_addons": ["sambar", "chutney", "spicy"]
     },
     "Uttapam": {
         "category": "South Indian",
-        "price": 100
+        "price": 100,
+        "allowed_addons": ["cheese", "butter", "spicy", "onion", "tomato"]
     },
     "Pav Bhaji": {
         "category": "Snacks",
-        "price": 120
+        "price": 120,
+        "allowed_addons": ["butter", "spicy", "cheese"]
     },
     "Misal Pav": {
         "category": "Snacks",
-        "price": 150
+        "price": 150,
+        "allowed_addons": ["spicy", "butter"]
     },
     "Dhokla": {
         "category": "Snacks",

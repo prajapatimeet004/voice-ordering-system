@@ -31,22 +31,20 @@ async def close_client():
         await _sarvam_client._client.aclose()
 
 async def transcribe_chunk(wav_filename, orders_dict, current_table, processed_audio_list=None):
-    directory = os.path.dirname(wav_filename)
-    basename = os.path.basename(wav_filename)
-    trimmed_file = os.path.join(directory, f"trimmed_{basename}")
-    
+    """
+    Transcribes a single audio chunk by sending it directly to the Sarvam API.
+    Silero VAD (trim_silence) is intentionally skipped here because:
+    1. The browser already performs VAD — only speech segments are sent.
+    2. torchaudio/torio segfaults on this machine when loading FFmpeg extensions.
+    """
     try:
-        has_voice = trim_silence(wav_filename, trimmed_file)
-        if os.path.exists(wav_filename):
-            safe_remove(wav_filename)
-            
-        if not has_voice:
-            print("Skipping silent chunk")
+        if not os.path.exists(wav_filename):
+            print(f"DEBUG: Audio file not found: {wav_filename}")
             return
 
-        # If the caller wants the processed audio, read it before it might be deleted
-        if processed_audio_list is not None and os.path.exists(trimmed_file):
-            with open(trimmed_file, "rb") as af:
+        # If the caller wants the processed audio bytes, read them
+        if processed_audio_list is not None:
+            with open(wav_filename, "rb") as af:
                 processed_audio_list.append(af.read())
 
         client = get_sarvam_client()
@@ -58,13 +56,14 @@ async def transcribe_chunk(wav_filename, orders_dict, current_table, processed_a
         
         for attempt in range(max_retries):
             try:
-                with open(trimmed_file, "rb") as f:
+                with open(wav_filename, "rb") as f:
                     response = await client.speech_to_text.transcribe(
                         model="saaras:v3",
                         file=f,
                         language_code="en-IN"
                     )
                 transcript_text = getattr(response, "transcript", "")
+                print(f"DEBUG: Sarvam API response transcript: '{transcript_text}'")
                 break # Success
             except Exception as req_err:
                 if attempt < max_retries - 1:
@@ -80,9 +79,11 @@ async def transcribe_chunk(wav_filename, orders_dict, current_table, processed_a
             })
             orders_dict[current_table]["full_transcript"] += " " + transcript_text.strip()
             print(f"Transcribed: {transcript_text}")
+        else:
+            print("DEBUG: Empty transcript returned (silence or unrecognized speech)")
             
     except Exception as e:
         print(f"Transcription error: {e}")
     finally:
-        if os.path.exists(trimmed_file):
-            safe_remove(trimmed_file)
+        if os.path.exists(wav_filename):
+            safe_remove(wav_filename)
