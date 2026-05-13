@@ -9,7 +9,9 @@ load_dotenv()
 SARVAM_API_KEY = os.getenv("SARVAM_API_KEY")
 TTS_URL = "https://api.sarvam.ai/text-to-speech"
 
-def generate_speech(text: str, language_code: str = "hi-IN", speaker: str = "pooja") -> Optional[str]:
+import httpx
+
+async def generate_speech(text: str, language_code: str = "hi-IN", speaker: str = "pooja") -> Optional[str]:
     """
     Generates speech using Sarvam's Bulbul model.
     Returns: Base64 encoded audio string or None on failure.
@@ -32,19 +34,20 @@ def generate_speech(text: str, language_code: str = "hi-IN", speaker: str = "poo
     }
 
     try:
-        response = requests.post(TTS_URL, json=payload, headers=headers)
-        if response.status_code == 200:
-            resp_json = response.json()
-            audio_data = resp_json.get("audios") or resp_json.get("audio_content") or resp_json.get("audio")
-            
-            if isinstance(audio_data, list) and len(audio_data) > 0:
-                return audio_data[0]
-            elif isinstance(audio_data, str):
-                return audio_data
-            return None
-        else:
-            print(f"ERROR: TTS Request failed with status {response.status_code}: {response.text}")
-            return None
+        async with httpx.AsyncClient() as client:
+            response = await client.post(TTS_URL, json=payload, headers=headers, timeout=30.0)
+            if response.status_code == 200:
+                resp_json = response.json()
+                audio_data = resp_json.get("audios") or resp_json.get("audio_content") or resp_json.get("audio")
+                
+                if isinstance(audio_data, list) and len(audio_data) > 0:
+                    return audio_data[0]
+                elif isinstance(audio_data, str):
+                    return audio_data
+                return None
+            else:
+                print(f"ERROR: TTS Request failed with status {response.status_code}: {response.text}")
+                return None
     except Exception as e:
         print(f"ERROR: Exception in generate_speech: {e}")
         return None

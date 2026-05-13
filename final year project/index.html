@@ -708,14 +708,14 @@
                 mediaRecorder.start(100);
             };
 
-            // Safety timeout: if server never responds within 15s, unlock VAD
+            // Safety timeout: if server never responds within 60s, unlock VAD
             let wsResponseTimeout = setTimeout(() => {
                 console.warn("WS response timeout — unlocking VAD.");
                 isProcessing = false;
                 isSpeaking = false;
                 setVADStatus('active');
                 transcriptEl.innerText = "Timeout. Try again.";
-            }, 15000);
+            }, 60000);
 
             audioWs.onmessage = (e) => {
                 clearTimeout(wsResponseTimeout);

@@ -509,7 +509,7 @@ async def process_order_logic(transcript: str, table_id: str):
         lang_code = result.get("language_code", "hi-IN")
         
         # Generate TTS
-        speech_b64 = generate_speech(response_text, language_code=lang_code)
+        speech_b64 = await generate_speech(response_text, language_code=lang_code)
         
         # --- Server-side Playback (for zero-latency "Call" feel) ---
         if speech_b64:
@@ -551,7 +551,7 @@ async def correct(transcript: str = Form(...), table_id: str = Form("default")):
             corrections = process_correction(transcript, current_order_items=current_items)
             
             response_text = response_service.get_correction_feedback_text([])
-            speech_b64 = generate_speech(response_text)
+            speech_b64 = await generate_speech(response_text)
             
             if speech_b64:
                 def play_async():
