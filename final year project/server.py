@@ -119,6 +119,10 @@ async def get_dashboard():
 # Mount the current directory for static assets (CSS, JS)
 app.mount("/static", StaticFiles(directory=os.path.dirname(__file__)), name="static")
 
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return FileResponse("favicon.ico") if os.path.exists("favicon.ico") else Response(status_code=204)
+
 @app.get("/")
 async def root():
     return FileResponse(os.path.join(os.path.dirname(__file__), "index.html"))
@@ -427,25 +431,43 @@ async def process_order_logic(transcript: str, table_id: str):
                 action = mod.get("action")
                 changes = mod.get("changes", {})
                 
-                # Find the target item in current order
+                # --- NEW: Normalize 'changes' to a dictionary immediately ---
+                changes_dict = {}
+                if isinstance(changes, list):
+                    for c in changes:
+                        if isinstance(c, dict) and "type" in c:
+                            changes_dict[c["type"]] = c.get("value")
+                elif isinstance(changes, dict):
+                    changes_dict = changes
+
+                # Find the target item (fuzzy match to menu)
                 matched_target, score, _ = fuzzy_match_dish(target)
-                if score < 0.65 or matched_target not in current_order_state["confirmed"]:
-                    # Try exact match if fuzzy fails
-                    if target in current_order_state["confirmed"]:
-                        matched_target = target
-                    else:
-                        print(f"DEBUG: Modification target '{target}' not found in order.")
-                        feedback = f"Maaf karjo, tamara order ma {target} nathi. Tamare biju kai change karvu che? (Sorry, {target} is not in your order. What would you like to change?)"
-                        if feedback not in response_text:
-                            response_text += " " + feedback
-                        continue
+                
+                # Check if it's already in the order
+                in_order = matched_target in current_order_state["confirmed"]
+                if not in_order and target in current_order_state["confirmed"]:
+                    matched_target = target
+                    in_order = True
+
+                # GUARD: If not in order AND not an 'add' action, we can't modify it
+                if not in_order and action != "add":
+                    print(f"DEBUG: Modification target '{target}' not found in order.")
+                    feedback = f"Maaf karjo, tamara order ma {target} nathi. Tamare biju kai change karvu che? (Sorry, {target} is not in your order. What would you like to change?)"
+                    if feedback not in response_text:
+                        response_text += " " + feedback
+                    continue
+                
+                # If 'add' action and score is low, we might be trying to add a non-existent menu item
+                if action == "add" and score < 0.3:
+                    print(f"DEBUG: Modification 'add' target '{target}' not found in menu.")
+                    continue
 
                 if action == "remove":
                     del current_order_state["confirmed"][matched_target]
                     print(f"DEBUG: Removed '{matched_target}'")
                 
                 elif action == "replace":
-                    new_item_name = changes.get("new_item")
+                    new_item_name = changes_dict.get("new_item")
                     if new_item_name:
                         matched_new, score, _ = fuzzy_match_dish(new_item_name)
                         if score > 0.3:
@@ -454,31 +476,38 @@ async def process_order_logic(transcript: str, table_id: str):
                             current_order_state["confirmed"][matched_new] = {
                                 "dish": matched_new, 
                                 "quantity": qty, 
-                                "addons": [f"{k}: {v}" for k, v in changes.items() if k != "new_item"]
+                                "addons": [f"{k}: {v}" for k, v in changes_dict.items() if k != "new_item"]
                             }
                             print(f"DEBUG: Replaced '{matched_target}' with '{matched_new}'")
 
                 elif action in ["update", "add"]:
                     # Update addons or quantity
+                    if matched_target not in current_order_state["confirmed"]:
+                        # Initialize new item if adding
+                        current_order_state["confirmed"][matched_target] = {
+                            "dish": matched_target, 
+                            "quantity": 1 if action == "add" else 0, 
+                            "addons": []
+                        }
+                    
                     existing = current_order_state["confirmed"][matched_target]
                     
                     # Update quantity if present
-                    if "quantity" in changes:
-                        qty_val = changes.pop("quantity")
-                        if isinstance(qty_val, int) or str(qty_val).isdigit():
+                    if "quantity" in changes_dict:
+                        qty_val = changes_dict.pop("quantity")
+                        if isinstance(qty_val, int) or (isinstance(qty_val, str) and qty_val.isdigit()):
                             existing["quantity"] = int(qty_val)
                         elif str(qty_val).lower() == "increase":
                             existing["quantity"] += 1
                         elif str(qty_val).lower() == "decrease":
                             existing["quantity"] = max(1, existing["quantity"] - 1)
-                        # Ignore other unrecognized string values for quantity
                     
-                    # Use merge_structured_addons for all other changes (which are assumed to be addons)
-                    if changes:
+                    # Use merge_structured_addons for all other changes (addons)
+                    if changes_dict:
                         current_addons = existing.get("addons", [])
-                        updated_addons = merge_structured_addons(current_addons, changes)
+                        updated_addons = merge_structured_addons(current_addons, changes_dict)
                         existing["addons"] = updated_addons
-                        print(f"DEBUG: Updated '{matched_target}' addons: {updated_addons} (from changes: {changes})")
+                        print(f"DEBUG: Updated '{matched_target}' addons: {updated_addons} (from changes: {changes_dict})")
         
         # fallback is_finished
         if result.get("is_finished"):

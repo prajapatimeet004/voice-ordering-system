@@ -302,15 +302,25 @@ def extract_addons(transcript: str, fuzzy_threshold: int = 75) -> dict:
 
     return {"addons": addons_result}
 
-def merge_structured_addons(current_addons: list, new_addons_dict: dict) -> list:
+def merge_structured_addons(current_addons: list, new_addons_input) -> list:
     """
-    Intelligently merges a dictionary of new addons into the existing list of strings.
-    Handles 'remove', 'remove_action', and 'swap' correctly by identifying 
-    which existing strings belong to which categories.
+    Intelligently merges new addons into the existing list of strings.
+    Handles both dictionary format and the new list-of-dicts format.
     """
-    if not new_addons_dict:
+    if not new_addons_input:
         return current_addons
         
+    # Normalize input to a dictionary
+    new_addons_dict = {}
+    if isinstance(new_addons_input, list):
+        for item in new_addons_input:
+            if isinstance(item, dict) and "type" in item:
+                new_addons_dict[item["type"]] = item.get("value", "add")
+    elif isinstance(new_addons_input, dict):
+        new_addons_dict = new_addons_input
+    else:
+        return current_addons
+
     # Map current strings to their categories
     category_to_string = {}
     for s in current_addons:
@@ -323,6 +333,15 @@ def merge_structured_addons(current_addons: list, new_addons_dict: dict) -> list
     final_addons = set(current_addons)
     
     for category, action in new_addons_dict.items():
+        # --- NORMALIZATION: Convert friendly words to technical actions ---
+        action = str(action).lower().strip()
+        if action in ["extra", "more", "vadhu", "vadhare", "jyada", "add"]:
+            action = "increase"
+        elif action in ["less", "ochhu", "kam", "ochi"]:
+            action = "decrease"
+        elif action in ["no", "nathi", "without", "hatao", "remove"]:
+            action = "remove"
+        
         if action in ["remove", "remove_action", "swap"]:
             # If we know which string represents this category, remove it
             if category in category_to_string:
@@ -340,10 +359,15 @@ def merge_structured_addons(current_addons: list, new_addons_dict: dict) -> list
                 friendly = {
                     "spicy": "tikhu" if action != "decrease" else "ochhu tikhu", 
                     "butter": "butter", 
-                    "onion": "without onion", 
+                    "cheese": "cheese",
+                    "sambar": "sambar",
+                    "chutney": "chutney",
                     "sweet": "sweet",
-                    "cold": "cold" if action != "decrease" else "thodu thandu",
-                    "chutney": "chutney"
+                    "sugar": "sugar",
+                    "milk": "milk",
+                    "garlic": "garlic",
+                    "onion": "onion",
+                    "cold": "cold" if action != "decrease" else "thodu thandu"
                 }
                 
                 # If it was a decrease, use a better name if not in friendly

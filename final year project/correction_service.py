@@ -26,9 +26,10 @@ def get_cerebras_client():
     global _cerebras_client
     if _cerebras_client is None:
         from openai import OpenAI
+        CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")
         _cerebras_client = OpenAI(
             base_url="https://api.cerebras.ai/v1",
-            api_key="csk-9fhkv3hvmt4krfdrkcwjhwvvd9wx9d8ddem4jcdndrhcphty"
+            api_key=CEREBRAS_API_KEY
         )
     return _cerebras_client
 

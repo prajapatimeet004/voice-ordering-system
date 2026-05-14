@@ -420,6 +420,50 @@
             transform: translateY(-3px);
             opacity: 0.9;
         }
+
+        /* Microphone Selector */
+        .mic-selector-container {
+            position: absolute;
+            top: 2rem;
+            left: 2rem;
+            z-index: 101;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .mic-select {
+            background: var(--glass);
+            color: #fff;
+            border: 1px solid var(--glass-border);
+            padding: 0.6rem 1.2rem;
+            border-radius: 100px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            outline: none;
+            backdrop-filter: blur(20px);
+            max-width: 180px;
+            transition: 0.3s;
+            appearance: none;
+            -webkit-appearance: none;
+        }
+
+        .mic-select:hover {
+            background: var(--glass-heavy);
+            border-color: var(--primary);
+        }
+
+        .mic-select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px var(--accent-glow);
+        }
+
+        .settings-icon {
+            color: var(--text-muted);
+            width: 18px;
+            height: 18px;
+        }
     </style>
 </head>
 
@@ -469,6 +513,14 @@
 
             <!-- RIGHT: Voice Ordering Panel -->
             <div class="voice-panel">
+                <!-- Microphone Selector -->
+                <div class="mic-selector-container">
+                    <i data-lucide="settings" class="settings-icon"></i>
+                    <select id="mic-select" class="mic-select">
+                        <option value="default">Default Mic</option>
+                    </select>
+                </div>
+
                 <div class="active-table-badge">
                     TABLE <span id="selected-table-id">1</span>
                 </div>
@@ -534,6 +586,7 @@
         let analyser = null;
         let animFrameId = null;
         let audioWs = null;
+        let selectedMicId = 'default';
 
         // ─── UI Elements ────────────────────────────────────────────────
         const micBtn = document.getElementById('mic-btn');
@@ -541,6 +594,7 @@
         const vadStatusEl = document.getElementById('vad-status');
         const transcriptEl = document.getElementById('transcript');
         const replyEl = document.getElementById('assistant-reply');
+        const micSelect = document.getElementById('mic-select');
 
         const CATEGORY_EMOJIS = {
             'Main Course': '&#x1F35B;', 'South Indian': '&#x1F958;', 'Starters': '&#x1F362;',
@@ -558,8 +612,39 @@
             loadMenu();
             lucide.createIcons();
             // Auto-init VAD when entering the order screen
-            initVAD();
+            updateMicList().then(() => initVAD());
         }
+
+        async function updateMicList() {
+            try {
+                // Request permission first to get labels
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                stream.getTracks().forEach(t => t.stop());
+
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const mics = devices.filter(d => d.kind === 'audioinput');
+                
+                micSelect.innerHTML = mics.map(m => 
+                    `<option value="${m.deviceId}">${m.label || `Microphone ${m.deviceId.slice(0, 5)}`}</option>`
+                ).join('');
+
+                if (mics.length > 0 && !mics.find(m => m.deviceId === selectedMicId)) {
+                    selectedMicId = mics[0].deviceId;
+                    micSelect.value = selectedMicId;
+                }
+            } catch (err) {
+                console.error("Error enumerating devices:", err);
+            }
+        }
+
+        micSelect.addEventListener('change', (e) => {
+            selectedMicId = e.target.value;
+            console.log("Selected Microphone:", selectedMicId);
+            if (vadActive) {
+                stopVAD();
+                initVAD();
+            }
+        });
 
         async function loadMenu() {
             try {
@@ -608,7 +693,11 @@
         async function initVAD() {
             if (vadActive) return;
             try {
-                micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                const constraints = {
+                    audio: selectedMicId === 'default' ? true : { deviceId: { exact: selectedMicId } },
+                    video: false
+                };
+                micStream = await navigator.mediaDevices.getUserMedia(constraints);
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 analyser = audioCtx.createAnalyser();
                 analyser.fftSize = 256;
