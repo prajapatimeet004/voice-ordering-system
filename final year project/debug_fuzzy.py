@@ -1,16 +1,17 @@
-from rapidfuzz import fuzz, process
+import re
+from rapidfuzz import process, fuzz
+from classifier_service import INDIAN_MENU, match_dish_with_embeddings
 
-menu = [
-    "Masala Dosa", "Paneer Tikka", "Butter Chicken", "Chicken Biryani", 
-    "Samosa", "Chhole Bhature", "Dal Makhani", "Palak Paneer", 
-    "Aloo Gobi", "Naan", "Roti", "Chai", "Coffee", "Tea", "Burger", "Pizza",
-    "Gulab Jamun", "Jalebi", "Idli", "Vada", "Uttapam", "Pav Bhaji", "Misal Pav",
-    "Dhokla", "Thepla", "Khandvi", "Vada Pav", "Rajma Chawal",
-    "Chicken Tikka", "Mutton Rogan Josh", "Fish Curry", "Prawn Curry"
-]
+dish = "palarmeo pasta"
+print(f"Testing fuzzy match for: '{dish}'")
 
-test_cases = ["mohan josh", "nan", "burger", "chai", "mutton rogan josh"]
+# Test embeddings/hybrid
+match, score, is_ambiguous = match_dish_with_embeddings(dish)
+print(f"Hybrid Match: {match} (Score: {score:.2f}, Ambiguous: {is_ambiguous})")
 
-for t in test_cases:
-    match, score, idx = process.extractOne(t, menu, scorer=fuzz.token_set_ratio)
-    print(f"Match: '{t}' -> '{match}' Score: {score}")
+# Test raw rapidfuzz
+best_match = process.extractOne(dish, INDIAN_MENU, scorer=fuzz.WRatio)
+print(f"Rapidfuzz WRatio: {best_match}")
+
+best_match_token = process.extractOne(dish, INDIAN_MENU, scorer=fuzz.token_set_ratio)
+print(f"Rapidfuzz Token Set: {best_match_token}")

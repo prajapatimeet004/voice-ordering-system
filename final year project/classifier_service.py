@@ -33,6 +33,16 @@ load_dotenv(override=True)
 import inventory_service
 from groq import AsyncGroq
 
+# Load Menu Data for Validation
+MENU_FILE = os.path.join(os.path.dirname(__file__), "menu.json")
+def load_menu_data():
+    if os.path.exists(MENU_FILE):
+        with open(MENU_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+MENU_DATA = load_menu_data()
+
 
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY") 
@@ -415,49 +425,57 @@ def preprocess_transcript(transcript: str):
 
 # Comprehensive Indian Menu
 INDIAN_MENU = [
-    "Masala Dosa", "Plain Dosa", "Mysore Dosa", "Rava Dosa",
-    "Paneer Tikka", "Palak Paneer", "Paneer Pasanda", "Paneer Butter Masala",
-    "Butter Chicken", "Chicken Biryani", "Chicken Tikka", "Chicken Masala",
-    "Samosa", "Chhole Bhature", "Dal Makhani", "Aloo Gobi", "Mix Veg", 
-    "Aloo Bhuri", "Puri Bhaji", "Aloo Paratha",
-    "Naan", "Roti", "Chai", "Coffee", "Tea", "Burger", "Pizza",
-    "Gulab Jamun", "Jalebi", "Idli", "Vada", "Uttapam", "Pav Bhaji", "Misal Pav",
-    "Dhokla", "Thepla", "Khandvi", "Vada Pav", "Rajma Chawal",
-    "Mutton Rogan Josh", "Fish Curry", "Prawn Curry", "Tandoori Roti"
+    "Plain Masala Dosa", "Mysore Masala Dosa", "Cheese Masala Dosa", "Paneer Masala Dosa", "Butter Masala Dosa",
+    "Paneer Tikka Sandwich",
+    "Classic Butter Chicken", "Smoky Butter Chicken", "Butter Chicken Boneless", "Spicy Butter Chicken",
+    "Veg Loaded Pizza",
+    "Amritsari Chole Bhature", "Delhi Style Chole Bhature", "Paneer Chole Bhature", "Extra Masala Chole Bhature",
+    "Veg Biryani", "Paneer Biryani", "Chicken Biryani", "Hyderabadi Dum Biryani", "Mughlai Biryani",
+    "Classic Pav Bhaji", "Cheese Pav Bhaji", "Paneer Pav Bhaji", "Khada Pav Bhaji",
+    "Veg Momos", "Paneer Momos", "Chicken Momos", "Tandoori Momos", "Schezwan Momos",
+    "Malai Kulfi", "Kesar Pista Kulfi", "Gulab Jamun", "Rabdi", "Brownie with Ice Cream",
+    "Mango Lassi", "Sweet Lassi", "Masala Chaas", "Cold Coffee", "Oreo Shake", "Masala Chai", "Filter Coffee", "Green Tea"
 ]
 
 MENU_CATEGORIES = {
-    "Dosas": ["Masala Dosa", "Plain Dosa", "Mysore Dosa", "Rava Dosa", "Uttapam"],
-    "Paneer": ["Paneer Tikka", "Palak Paneer", "Paneer Pasanda", "Paneer Butter Masala"],
-    "Chicken": ["Butter Chicken", "Chicken Biryani", "Chicken Tikka", "Chicken Masala"],
-    "Main Course": ["Dal Makhani", "Chhole Bhature", "Mix Veg", "Aloo Gobi", "Aloo Bhuri", "Rajma Chawal"],
-    "Starters": ["Samosa", "Vada Pav", "Pav Bhaji", "Misal Pav", "Dhokla", "Thepla", "Khandvi"],
-    "South Indian": ["Idli", "Vada", "Uttapam", "Masala Dosa"],
-    "Breads": ["Naan", "Roti", "Aloo Paratha", "Puri Bhaji", "Tandoori Roti"],
-    "Beverages": ["Chai", "Coffee", "Tea"],
-    "Desserts": ["Gulab Jamun", "Jalebi"],
-    "Fusion/Global": ["Burger", "Pizza"],
-    "Non-Veg": ["Mutton Rogan Josh", "Fish Curry", "Prawn Curry", "Chicken Biryani", "Chicken Tikka", "Butter Chicken", "Chicken Masala"]
+    "South Indian": ["Plain Masala Dosa", "Mysore Masala Dosa", "Cheese Masala Dosa", "Paneer Masala Dosa", "Butter Masala Dosa"],
+    "Sandwich": ["Paneer Tikka Sandwich"],
+    "Main Course": ["Classic Butter Chicken", "Smoky Butter Chicken", "Butter Chicken Boneless", "Spicy Butter Chicken"],
+    "Pizza": ["Veg Loaded Pizza"],
+    "Punjabi": ["Amritsari Chole Bhature", "Delhi Style Chole Bhature", "Paneer Chole Bhature", "Extra Masala Chole Bhature"],
+    "Rice": ["Veg Biryani", "Paneer Biryani", "Chicken Biryani", "Hyderabadi Dum Biryani", "Mughlai Biryani"],
+    "Street Food": ["Classic Pav Bhaji", "Cheese Pav Bhaji", "Paneer Pav Bhaji", "Khada Pav Bhaji"],
+    "Snacks": ["Veg Momos", "Paneer Momos", "Chicken Momos", "Tandoori Momos", "Schezwan Momos"],
+    "Desserts": ["Malai Kulfi", "Kesar Pista Kulfi", "Gulab Jamun", "Rabdi", "Brownie with Ice Cream"],
+    "Drinks": ["Mango Lassi", "Sweet Lassi", "Masala Chaas", "Cold Coffee", "Oreo Shake", "Masala Chai", "Filter Coffee", "Green Tea"]
 }
 
 # Addon Rules Mapping
 ADDON_RULES_DATA = {
-    "Dosas / South Indian": ["Extra Sambar", "Extra Chutney", "Butter", "Cheese", "Spicy", "Less Spicy", "No Onion"],
-    "Paneer / Main Course": ["Extra Butter", "Extra Cheese", "Spicy", "Medium Spicy", "Less Spicy", "No Onion", "No Garlic", "Sweet", "Meetha"],
-    "Chicken Dishes": ["Spicy", "Extra Butter", "Boneless"],
-    "Starters (Samosa/Vada Pav)": ["Extra Chutney", "Spicy", "Fried Chilies"],
-    "Beverages": ["With Sugar", "No Sugar", "Extra Milk", "Strong", "With Ice"],
-    "Fast Food": ["Extra Cheese", "Extra Toppings", "No Onion", "No Tomato"]
+    "South Indian": ["Extra Butter", "Extra Crispy", "Jain Preparation", "Cheese Burst", "Mild", "Medium", "Spicy"],
+    "Sandwich": ["White Bread", "Brown Bread", "Multigrain", "Garlic Bread", "Focaccia", "Extra Cheese", "Jalapeños", "Corn", "Tandoori Mayo", "Mint Mayo", "Grilled", "Toasted", "Open Sandwich"],
+    "Main Course": ["Butter Naan", "Garlic Naan", "Jeera Rice", "Laccha Paratha", "Regular", "Extra Cream", "Less Cream", "Mild", "Medium", "High"],
+    "Pizza": ["Thin Crust", "Cheese Burst", "Hand Tossed", "Whole Wheat", "Paneer Tikka", "Corn", "Jalapeños", "Onion", "Capsicum", "Mushrooms", "Extra Cheese", "Classic Tomato", "Tandoori Sauce", "Peri Peri Sauce"],
+    "Punjabi": ["Pickle", "Onion Salad", "Green Chilli", "Extra Bhature", "Sweet Lassi Combo", "Masala Chaas Combo"],
+    "Rice": ["Classic Basmati", "Brown Rice", "Boiled Egg", "Extra Raita", "Salan", "Extra Gravy", "Mild", "Medium", "Hyderabadi Spicy"],
+    "Street Food": ["Butter Pav", "Garlic Pav", "Cheese Pav", "Multigrain Pav", "Extra Butter", "Cheese Topping", "Fried Pav"],
+    "Snacks": ["Steamed", "Fried", "Tandoori", "Kurkure", "Red Chutney", "Mayo Dip", "Schezwan Sauce"],
+    "Desserts": ["Stick Kulfi", "Matka Kulfi", "Sizzling Brownie", "Dry Fruits", "Chocolate Syrup", "Rabdi Layer"],
+    "Drinks": ["Sugar Free", "Extra Thick", "Ice Cream Add-on", "Almond Milk Option"]
 }
 
 # Define item-to-category mapping for addons
 ADDON_ITEM_MAPPING = {
-    "Dosas / South Indian": ["Masala Dosa", "Plain Dosa", "Mysore Dosa", "Rava Dosa", "Uttapam", "Idli", "Vada"],
-    "Paneer / Main Course": ["Paneer Tikka", "Palak Paneer", "Paneer Butter Masala", "Dal Makhani", "Mix Veg"],
-    "Chicken Dishes": ["Butter Chicken", "Chicken Biryani", "Chicken Tikka", "Chicken Masala"],
-    "Starters (Samosa/Vada Pav)": ["Samosa", "Vada Pav", "Pav Bhaji", "Misal Pav"],
-    "Beverages": ["Chai", "Coffee", "Tea"],
-    "Fast Food": ["Burger", "Pizza"]
+    "South Indian": ["Plain Masala Dosa", "Mysore Masala Dosa", "Cheese Masala Dosa", "Paneer Masala Dosa", "Butter Masala Dosa"],
+    "Sandwich": ["Paneer Tikka Sandwich"],
+    "Main Course": ["Classic Butter Chicken", "Smoky Butter Chicken", "Butter Chicken Boneless", "Spicy Butter Chicken"],
+    "Pizza": ["Veg Loaded Pizza"],
+    "Punjabi": ["Amritsari Chole Bhature", "Delhi Style Chole Bhature", "Paneer Chole Bhature", "Extra Masala Chole Bhature"],
+    "Rice": ["Veg Biryani", "Paneer Biryani", "Chicken Biryani", "Hyderabadi Dum Biryani", "Mughlai Biryani"],
+    "Street Food": ["Classic Pav Bhaji", "Cheese Pav Bhaji", "Paneer Pav Bhaji", "Khada Pav Bhaji"],
+    "Snacks": ["Veg Momos", "Paneer Momos", "Chicken Momos", "Tandoori Momos", "Schezwan Momos"],
+    "Desserts": ["Malai Kulfi", "Kesar Pista Kulfi", "Gulab Jamun", "Rabdi", "Brownie with Ice Cream"],
+    "Drinks": ["Mango Lassi", "Sweet Lassi", "Masala Chaas", "Cold Coffee", "Oreo Shake", "Masala Chai", "Filter Coffee", "Green Tea"]
 }
 
 ADDON_RULES_STR = "\n".join([
@@ -886,6 +904,15 @@ Detect the language of the customer's input and ALWAYS reply in the SAME languag
    - `addons`: [{"type": "butter", "value": "extra"}] or [{"type": "spicy", "value": "remove"}]
    - `changes`: [{"type": "quantity", "value": "2"}]
 
+5. **STRICT MENU ADHERENCE**:
+   - If a user asks for an item NOT in the provided {AVAILABLE_MENU} (e.g., Pasta, Sushi, etc.), you MUST NOT add it to the `items` list.
+   - Instead, apologize in Gujlish/Hindi and inform them it is not available.
+    - If a user asks for a generic category (e.g., just "Biryani", "Dosa", "Momos") WITHOUT specifying which one, you MUST list the options (e.g., "We have Mysore, Plain, and Cheese Dosa. Which one?").
+    - If a user SPECIFIES a specific variant (e.g., "Ek Veg Biryani" or "Ek Mysore Masala Dosa"), you MUST CONFIRM it immediately and suggest a relevant addon. 
+    - **CRITICAL**: If a specific variant is mentioned, DO NOT ask the user to choose from other variants.
+    - Example: "Theek hai, ek Veg Biryani. Sathe extra raita ya salan aapu?" (OK, one Veg Biryani. Should I give extra raita or salan with it?)
+    - ALWAYS suggest at least one relevant addon or customization for every item ordered.
+
 ---
 
 ## 📌 EXTRACTION EXAMPLES
@@ -1015,9 +1042,19 @@ Proactively suggest based on context. Keep it SHORT — one line max.
 
 ---
 
+## ❓ PROACTIVE CLARIFICATION & UPSELLING
+1. **Generic Items**: If a user says "Biryani", "Dosa", "Sandwich", or "Momos", respond by listing the variants and asking which one they prefer.
+2. **Addon Upselling**: For every item added, suggest a relevant addon. 
+   - Dosa -> Extra Butter/Cheese/Crispy?
+   - Sandwich -> Extra Cheese/Mayo?
+   - Biryani -> Extra Raita/Salan?
+   - Chole Bhature -> Lassi Combo?
+   - Pizza -> Cheese Burst?
+3. **Natural Flow**: Don't be a robot. Ask like a friendly waiter. "Bhaai, Dosa ma Mysore, Cheese, ya Paneer valu aapu? Ane butter badhu nakhvu che?"
+
 ## 🧾 RESPONSE FORMAT RULES
 1. MAX 2-3 short sentences per reply.
-2. Confirm what you did + optionally suggest one thing.
+2. Confirm what you did + ASK for the missing details (variant/addon).
 3. Use natural filler words ("Haan ji", "Bilkul", "Sure bhai", "Kem nahi").
 4. ALWAYS return results in the specified JSON format.
 """
@@ -1080,7 +1117,7 @@ Proactively suggest based on context. Keep it SHORT — one line max.
                 print(f"OpenRouter Gemma Error: {e}. Falling back to OpenRouter Gemini...")
                 # 2. Fallback 1: OpenRouter (Gemini 2.0 Flash)
                 completion = await client.chat.completions.create(
-                    model="google/gemini-2.0-flash-exp",
+                    model="google/gemini-2.0-flash-001",
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": f"{hint_prompt}Current Order Summary: {current_order_summary}\n\nUser Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}"}
@@ -1158,14 +1195,40 @@ Proactively suggest based on context. Keep it SHORT — one line max.
             item_end = time.perf_counter()
             print(f"DEBUG: [TIME] Processed item '{mapped_dish}' in {(item_end - item_start)*1000:.2f}ms")
 
+            # --- ADDON VALIDATION ---
+            validated_addons = {}
+            rejected_addons = []
+            
+            # Get allowed addons for this dish
+            dish_info = MENU_DATA.get(mapped_dish, {})
+            allowed_list = dish_info.get("allowed_addons", [])
+            
+            if allowed_list:
+                for a_type, a_val in addons_dict.items():
+                    # Fuzzy match the addon type against the allowed list using partial_ratio
+                    match = process.extractOne(a_type, allowed_list, scorer=fuzz.partial_ratio)
+                    if match and match[1] >= 80: # Strict threshold for addons, but flexible on extra words
+                        validated_addons[match[0]] = a_val
+                    else:
+                        rejected_addons.append(a_type)
+            else:
+                # If no allowed list is defined, we might want to reject all or allow all.
+                # Given user's "Strict Menu Integrity" request, we should probably be careful.
+                # For now, let's allow common modifiers if not in a strict menu mode.
+                validated_addons = addons_dict
+
+            # Processed item object
             processed_item = {
                 "dish": mapped_dish.strip() if dish_score >= 0.10 else dish.strip(),
                 "quantity": qty,
-                "portion": "full", # Portions not explicitly in new schema but can be part of dish name
-                "modified_addons": addons_dict, # Use the structured dict from LLM
-                "addons": [f"{k}: {v}" for k, v in addons_dict.items() if v not in ["remove", "remove_action"]]
+                "portion": "full",
+                "modified_addons": validated_addons, 
+                "addons": [f"{k}: {v}" for k, v in validated_addons.items() if v not in ["remove", "remove_action"]]
             }
-            final_order_result["items"].append(processed_item)
+            
+            # Inform about rejected addons
+            if rejected_addons:
+                final_order_result["response_text"] += f" (Maaf karjo, pan {', '.join(rejected_addons)} {mapped_dish} sathe nathi malshye.)"
             
             # --- NEW: Raw Transcript Guard ---
             # If the LLM guessed a multi-word name but only one word was said, force confirm
@@ -1174,11 +1237,12 @@ Proactively suggest based on context. Keep it SHORT — one line max.
             is_partial_in_raw = (dish_clean not in raw_clean) and any(word in raw_clean for word in dish_clean.split())
             
             # Threshold checks
-            AUTO_REPLACE_THRESHOLD = 0.85
-            MIN_CONFIDENCE_THRESHOLD = 0.65
+            AUTO_REPLACE_THRESHOLD = 0.88 # Higher for auto-confirm
+            MIN_CONFIDENCE_THRESHOLD = 0.72 # Higher for even suggesting
 
             if is_ambiguous or is_partial_in_raw or (dish_score >= MIN_CONFIDENCE_THRESHOLD and dish_score < AUTO_REPLACE_THRESHOLD):
                 # Suggest item for confirmation
+                final_order_result["items"].append(processed_item) # ADDED HERE
                 final_order_result["needs_confirmation"].append({
                     "original": dish,
                     "suggested": mapped_dish.strip(),
@@ -1188,15 +1252,19 @@ Proactively suggest based on context. Keep it SHORT — one line max.
                 })
             elif dish_score >= AUTO_REPLACE_THRESHOLD:
                 # Auto-confirm high confidence
+                final_order_result["items"].append(processed_item) # ADDED HERE
                 final_order_result["confirmed"][processed_item["dish"]] = {
                     "quantity": qty,
                     "addons": processed_item["addons"]
                 }
             else: # Below MIN_CONFIDENCE_THRESHOLD
-                # Unknown dish - Ask to repeat
+                # Unknown dish - Ask to repeat or explicitly state not in menu
                 final_order_result["not_in_menu"].append(dish)
-                if not final_order_result["response_text"]:
-                    final_order_result["response_text"] = f"Maaf karjo, ek vaar fari thi bolsho? ('{dish}' khabar na padi). (Sorry, I didn't catch {dish}, could you say it again?)"
+                # Overwrite response text to be explicit about menu absence
+                if dish_score < 0.25:
+                    final_order_result["response_text"] = f"Maaf karjo, '{dish}' amara menu ma nathi. Tamare biju kai joie che? (Sorry, '{dish}' is not in our menu. Would you like something else?)"
+                else:
+                    final_order_result["response_text"] = f"Maaf karjo, '{dish}' khabar na padi. Ek vaar menu check kari ne fari bolsho? (Sorry, I didn't catch '{dish}'. Could you check the menu and say it again?)"
 
         # Store modifications for server processing
         final_order_result["modifications"] = extracted_modifications
@@ -1212,9 +1280,15 @@ Proactively suggest based on context. Keep it SHORT — one line max.
         print(f"ERROR processing transcript: {e}")
         # FALLBACK: Try simple fuzzy matching for the whole transcript
         mapped_dish, score, _ = fuzzy_match_dish(preprocessed_text)
-        if score > 0.5:
-            final_order_result["items"].append({"dish": mapped_dish, "quantity": 1, "portion": "full", "modifier": "set"})
+        if score > 0.75: # Much stricter for fallback
+            processed_item = {"dish": mapped_dish, "quantity": 1, "portion": "full", "modifier": "set", "addons": []}
+            final_order_result["items"].append(processed_item)
             final_order_result["confirmed"][mapped_dish] = {"quantity": 1, "addons": []}
+            final_order_result["response_text"] = f"Theek hai, ek {mapped_dish} kari didhu che. (OK, I've added one {mapped_dish}.)"
+        else:
+            # If no good match, explicitly say not in menu or not understood
+            final_order_result["response_text"] = "Maaf karjo, tamari vaat khabar na padi ane menu ma pan match nathi thatu. (Sorry, I didn't understand and couldn't find a match in the menu.)"
+            final_order_result["not_in_menu"].append(transcript)
 
     return final_order_result
 

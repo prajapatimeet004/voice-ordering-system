@@ -1,143 +1,44 @@
 {
-    "Masala Dosa": {
-        "category": "South Indian",
-        "price": 120,
-        "allowed_addons": ["cheese", "butter", "spicy", "chutney", "sambar"]
-    },
-    "Paneer Tikka": {
-        "category": "Starters",
-        "price": 220
-    },
-    "Butter Chicken": {
-        "category": "Main Course",
-        "price": 320,
-        "allowed_addons": ["spicy", "butter"]
-    },
-    "Chicken Biryani": {
-        "category": "Main Course",
-        "price": 280
-    },
-    "Samosa": {
-        "category": "Snacks",
-        "price": 20
-    },
-    "Chhole Bhature": {
-        "category": "Main Course",
-        "price": 150
-    },
-    "Dal Makhani": {
-        "category": "Main Course",
-        "price": 250
-    },
-    "Palak Paneer": {
-        "category": "Main Course",
-        "price": 230
-    },
-    "Aloo Gobi": {
-        "category": "Main Course",
-        "price": 180
-    },
-    "Naan": {
-        "category": "Breads",
-        "price": 40
-    },
-    "Roti": {
-        "category": "Breads",
-        "price": 20
-    },
-    "Chai": {
-        "category": "Beverages",
-        "price": 20
-    },
-    "Coffee": {
-        "category": "Beverages",
-        "price": 30
-    },
-    "Tea": {
-        "category": "Beverages",
-        "price": 20
-    },
-    "Burger": {
-        "category": "Fast Food",
-        "price": 120,
-        "allowed_addons": ["cheese", "mayo", "spicy"]
-    },
-    "Pizza": {
-        "category": "Fast Food",
-        "price": 200,
-        "allowed_addons": ["cheese", "olives", "mushrooms", "spicy"]
-    },
-    "Gulab Jamun": {
-        "category": "Dessert",
-        "price": 80
-    },
-    "Jalebi": {
-        "category": "Dessert",
-        "price": 60
-    },
-    "Idli": {
-        "category": "South Indian",
-        "price": 60,
-        "allowed_addons": ["sambar", "chutney", "spicy", "ghee", "butter"]
-    },
-    "Vada": {
-        "category": "South Indian",
-        "price": 50,
-        "allowed_addons": ["sambar", "chutney", "spicy"]
-    },
-    "Uttapam": {
-        "category": "South Indian",
-        "price": 100,
-        "allowed_addons": ["cheese", "butter", "spicy", "onion", "tomato"]
-    },
-    "Pav Bhaji": {
-        "category": "Snacks",
-        "price": 120,
-        "allowed_addons": ["butter", "spicy", "cheese"]
-    },
-    "Misal Pav": {
-        "category": "Snacks",
-        "price": 150,
-        "allowed_addons": ["spicy", "butter"]
-    },
-    "Dhokla": {
-        "category": "Snacks",
-        "price": 80
-    },
-    "Thepla": {
-        "category": "Snacks",
-        "price": 60
-    },
-    "Khandvi": {
-        "category": "Snacks",
-        "price": 120
-    },
-    "Vada Pav": {
-        "category": "Snacks",
-        "price": 30
-    },
-    "Rajma Chawal": {
-        "category": "Main Course",
-        "price": 180
-    },
-    "Chicken Tikka": {
-        "category": "Starters",
-        "price": 250
-    },
-    "Mutton Rogan Josh": {
-        "category": "Main Course",
-        "price": 380
-    },
-    "Fish Curry": {
-        "category": "Main Course",
-        "price": 300
-    },
-    "Prawn Curry": {
-        "category": "Main Course",
-        "price": 350
-    },
-    "Tandoori Roti": {
-        "category": "Breads",
-        "price": 30
-    }
+    "Plain Masala Dosa": { "category": "South Indian", "price": 100, "allowed_addons": ["Extra Butter", "Extra Crispy", "Jain Preparation", "Cheese Burst", "Mild", "Medium", "Spicy"] },
+    "Mysore Masala Dosa": { "category": "South Indian", "price": 140, "allowed_addons": ["Extra Butter", "Extra Crispy", "Jain Preparation", "Cheese Burst", "Mild", "Medium", "Spicy"] },
+    "Cheese Masala Dosa": { "category": "South Indian", "price": 150, "allowed_addons": ["Extra Butter", "Extra Crispy", "Jain Preparation", "Cheese Burst", "Mild", "Medium", "Spicy"] },
+    "Paneer Masala Dosa": { "category": "South Indian", "price": 160, "allowed_addons": ["Extra Butter", "Extra Crispy", "Jain Preparation", "Cheese Burst", "Mild", "Medium", "Spicy"] },
+    "Butter Masala Dosa": { "category": "South Indian", "price": 130, "allowed_addons": ["Extra Butter", "Extra Crispy", "Jain Preparation", "Cheese Burst", "Mild", "Medium", "Spicy"] },
+    "Paneer Tikka Sandwich": { "category": "Sandwich", "price": 180, "allowed_addons": ["White Bread", "Brown Bread", "Multigrain", "Garlic Bread", "Focaccia", "Extra Cheese", "Jalapeños", "Corn", "Tandoori Mayo", "Mint Mayo", "Grilled", "Toasted", "Open Sandwich"] },
+    "Classic Butter Chicken": { "category": "Main Course", "price": 320, "allowed_addons": ["Butter Naan", "Garlic Naan", "Jeera Rice", "Laccha Paratha", "Regular", "Extra Cream", "Less Cream", "Mild", "Medium", "High"] },
+    "Smoky Butter Chicken": { "category": "Main Course", "price": 340, "allowed_addons": ["Butter Naan", "Garlic Naan", "Jeera Rice", "Laccha Paratha", "Regular", "Extra Cream", "Less Cream", "Mild", "Medium", "High"] },
+    "Butter Chicken Boneless": { "category": "Main Course", "price": 350, "allowed_addons": ["Butter Naan", "Garlic Naan", "Jeera Rice", "Laccha Paratha", "Regular", "Extra Cream", "Less Cream", "Mild", "Medium", "High"] },
+    "Spicy Butter Chicken": { "category": "Main Course", "price": 330, "allowed_addons": ["Butter Naan", "Garlic Naan", "Jeera Rice", "Laccha Paratha", "Regular", "Extra Cream", "Less Cream", "Mild", "Medium", "High"] },
+    "Veg Loaded Pizza": { "category": "Pizza", "price": 250, "allowed_addons": ["Thin Crust", "Cheese Burst", "Hand Tossed", "Whole Wheat", "Paneer Tikka", "Corn", "Jalapeños", "Onion", "Capsicum", "Mushrooms", "Extra Cheese", "Classic Tomato", "Tandoori Sauce", "Peri Peri Sauce"] },
+    "Amritsari Chole Bhature": { "category": "Punjabi", "price": 160, "allowed_addons": ["Pickle", "Onion Salad", "Green Chilli", "Extra Bhature", "Sweet Lassi Combo", "Masala Chaas Combo"] },
+    "Delhi Style Chole Bhature": { "category": "Punjabi", "price": 150, "allowed_addons": ["Pickle", "Onion Salad", "Green Chilli", "Extra Bhature", "Sweet Lassi Combo", "Masala Chaas Combo"] },
+    "Paneer Chole Bhature": { "category": "Punjabi", "price": 180, "allowed_addons": ["Pickle", "Onion Salad", "Green Chilli", "Extra Bhature", "Sweet Lassi Combo", "Masala Chaas Combo"] },
+    "Extra Masala Chole Bhature": { "category": "Punjabi", "price": 160, "allowed_addons": ["Pickle", "Onion Salad", "Green Chilli", "Extra Bhature", "Sweet Lassi Combo", "Masala Chaas Combo"] },
+    "Veg Biryani": { "category": "Rice", "price": 200, "allowed_addons": ["Classic Basmati", "Brown Rice", "Boiled Egg", "Extra Raita", "Salan", "Extra Gravy", "Mild", "Medium", "Hyderabadi Spicy"] },
+    "Paneer Biryani": { "category": "Rice", "price": 220, "allowed_addons": ["Classic Basmati", "Brown Rice", "Boiled Egg", "Extra Raita", "Salan", "Extra Gravy", "Mild", "Medium", "Hyderabadi Spicy"] },
+    "Chicken Biryani": { "category": "Rice", "price": 280, "allowed_addons": ["Classic Basmati", "Brown Rice", "Boiled Egg", "Extra Raita", "Salan", "Extra Gravy", "Mild", "Medium", "Hyderabadi Spicy"] },
+    "Hyderabadi Dum Biryani": { "category": "Rice", "price": 300, "allowed_addons": ["Classic Basmati", "Brown Rice", "Boiled Egg", "Extra Raita", "Salan", "Extra Gravy", "Mild", "Medium", "Hyderabadi Spicy"] },
+    "Mughlai Biryani": { "category": "Rice", "price": 320, "allowed_addons": ["Classic Basmati", "Brown Rice", "Boiled Egg", "Extra Raita", "Salan", "Extra Gravy", "Mild", "Medium", "Hyderabadi Spicy"] },
+    "Classic Pav Bhaji": { "category": "Street Food", "price": 120, "allowed_addons": ["Butter Pav", "Garlic Pav", "Cheese Pav", "Multigrain Pav", "Extra Butter", "Cheese Topping", "Fried Pav"] },
+    "Cheese Pav Bhaji": { "category": "Street Food", "price": 150, "allowed_addons": ["Butter Pav", "Garlic Pav", "Cheese Pav", "Multigrain Pav", "Extra Butter", "Cheese Topping", "Fried Pav"] },
+    "Paneer Pav Bhaji": { "category": "Street Food", "price": 160, "allowed_addons": ["Butter Pav", "Garlic Pav", "Cheese Pav", "Multigrain Pav", "Extra Butter", "Cheese Topping", "Fried Pav"] },
+    "Khada Pav Bhaji": { "category": "Street Food", "price": 140, "allowed_addons": ["Butter Pav", "Garlic Pav", "Cheese Pav", "Multigrain Pav", "Extra Butter", "Cheese Topping", "Fried Pav"] },
+    "Veg Momos": { "category": "Snacks", "price": 100, "allowed_addons": ["Steamed", "Fried", "Tandoori", "Kurkure", "Red Chutney", "Mayo Dip", "Schezwan Sauce"] },
+    "Paneer Momos": { "category": "Snacks", "price": 120, "allowed_addons": ["Steamed", "Fried", "Tandoori", "Kurkure", "Red Chutney", "Mayo Dip", "Schezwan Sauce"] },
+    "Chicken Momos": { "category": "Snacks", "price": 150, "allowed_addons": ["Steamed", "Fried", "Tandoori", "Kurkure", "Red Chutney", "Mayo Dip", "Schezwan Sauce"] },
+    "Tandoori Momos": { "category": "Snacks", "price": 140, "allowed_addons": ["Steamed", "Fried", "Tandoori", "Kurkure", "Red Chutney", "Mayo Dip", "Schezwan Sauce"] },
+    "Schezwan Momos": { "category": "Snacks", "price": 130, "allowed_addons": ["Steamed", "Fried", "Tandoori", "Kurkure", "Red Chutney", "Mayo Dip", "Schezwan Sauce"] },
+    "Malai Kulfi": { "category": "Desserts", "price": 80, "allowed_addons": ["Stick Kulfi", "Matka Kulfi", "Sizzling Brownie", "Dry Fruits", "Chocolate Syrup", "Rabdi Layer"] },
+    "Kesar Pista Kulfi": { "category": "Desserts", "price": 90, "allowed_addons": ["Stick Kulfi", "Matka Kulfi", "Sizzling Brownie", "Dry Fruits", "Chocolate Syrup", "Rabdi Layer"] },
+    "Gulab Jamun": { "category": "Desserts", "price": 60, "allowed_addons": ["Stick Kulfi", "Matka Kulfi", "Sizzling Brownie", "Dry Fruits", "Chocolate Syrup", "Rabdi Layer"] },
+    "Rabdi": { "category": "Desserts", "price": 100, "allowed_addons": ["Stick Kulfi", "Matka Kulfi", "Sizzling Brownie", "Dry Fruits", "Chocolate Syrup", "Rabdi Layer"] },
+    "Brownie with Ice Cream": { "category": "Desserts", "price": 180, "allowed_addons": ["Stick Kulfi", "Matka Kulfi", "Sizzling Brownie", "Dry Fruits", "Chocolate Syrup", "Rabdi Layer"] },
+    "Mango Lassi": { "category": "Drinks", "price": 80, "allowed_addons": ["Sugar Free", "Extra Thick", "Ice Cream Add-on", "Almond Milk Option"] },
+    "Sweet Lassi": { "category": "Drinks", "price": 70, "allowed_addons": ["Sugar Free", "Extra Thick", "Ice Cream Add-on", "Almond Milk Option"] },
+    "Masala Chaas": { "category": "Drinks", "price": 40, "allowed_addons": ["Sugar Free", "Extra Thick", "Ice Cream Add-on", "Almond Milk Option"] },
+    "Cold Coffee": { "category": "Drinks", "price": 120, "allowed_addons": ["Sugar Free", "Extra Thick", "Ice Cream Add-on", "Almond Milk Option"] },
+    "Oreo Shake": { "category": "Drinks", "price": 150, "allowed_addons": ["Sugar Free", "Extra Thick", "Ice Cream Add-on", "Almond Milk Option"] },
+    "Masala Chai": { "category": "Drinks", "price": 30, "allowed_addons": ["Sugar Free", "Extra Thick", "Ice Cream Add-on", "Almond Milk Option"] },
+    "Filter Coffee": { "category": "Drinks", "price": 40, "allowed_addons": ["Sugar Free", "Extra Thick", "Ice Cream Add-on", "Almond Milk Option"] },
+    "Green Tea": { "category": "Drinks", "price": 30, "allowed_addons": ["Sugar Free", "Extra Thick", "Ice Cream Add-on", "Almond Milk Option"] }
 }

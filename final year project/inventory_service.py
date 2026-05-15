@@ -34,14 +34,12 @@ def save_inventory(inventory):
 def get_stock(dish_name):
     """
     Returns the current stock for a given dish.
-    If the dish is not in the inventory file, it defaults to 20 (assuming it's a valid menu item).
+    If the dish is not in the inventory file, it defaults to 0.
     """
     inventory = load_inventory()
     if dish_name in inventory:
         return inventory[dish_name].get("stock", 0)
-    
-    # Default behavior for items not yet explicitly managed in inventory.json
-    return 20
+    return 0
 
 def update_stock(dish_name, change):
     """
@@ -55,11 +53,10 @@ def update_stock(dish_name, change):
         inventory[dish_name]["stock"] = new_stock
         return save_inventory(inventory)
     else:
-        # If item doesn't exist, we add it with a base of 20 + change
-        new_stock = max(0, 20 + change)
-        inventory[dish_name] = {"stock": new_stock}
-        print(f"Dish {dish_name} added to inventory with {new_stock} stock.")
-        return save_inventory(inventory)
+        # If item doesn't exist, we do NOT auto-add it with stock anymore.
+        # This prevents unknown/typo items from being 'confirmed' as available.
+        print(f"DEBUG: update_stock called for unknown dish '{dish_name}'. Skipping.")
+        return False
 
 def check_availability(dish_name, quantity=1):
     """

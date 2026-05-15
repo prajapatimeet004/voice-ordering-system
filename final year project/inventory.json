@@ -1,134 +1,44 @@
 {
-    "Masala Dosa": {
-        "stock": 50,
-        "alternative": "Uttapam"
-    },
-    "Paneer Tikka": {
-        "stock": 50,
-        "alternative": "Chicken Tikka"
-    },
-    "Butter Chicken": {
-        "stock": 50,
-        "alternative": "Paneer Tikka"
-    },
-    "Chicken Biryani": {
-        "stock": 49,
-        "alternative": "Dal Makhani"
-    },
-    "Samosa": {
-        "stock": 50,
-        "alternative": "Dhokla"
-    },
-    "Chhole Bhature": {
-        "stock": 50,
-        "alternative": "Pav Bhaji"
-    },
-    "Dal Makhani": {
-        "stock": 49,
-        "alternative": "Palak Paneer"
-    },
-    "Palak Paneer": {
-        "stock": 50,
-        "alternative": "Aloo Gobi"
-    },
-    "Aloo Gobi": {
-        "stock": 49,
-        "alternative": "Palak Paneer"
-    },
-    "Naan": {
-        "stock": 100,
-        "alternative": "Roti"
-    },
-    "Roti": {
-        "stock": 100,
-        "alternative": "Naan"
-    },
-    "Chai": {
-        "stock": 100,
-        "alternative": "Coffee"
-    },
-    "Coffee": {
-        "stock": 100,
-        "alternative": "Chai"
-    },
-    "Tea": {
-        "stock": 96,
-        "alternative": "Chai"
-    },
-    "Burger": {
-        "stock": 43,
-        "alternative": "Pizza"
-    },
-    "Pizza": {
-        "stock": 48,
-        "alternative": "Burger"
-    },
-    "Gulab Jamun": {
-        "stock": 43,
-        "alternative": "Jalebi"
-    },
-    "Jalebi": {
-        "stock": 48,
-        "alternative": "Gulab Jamun"
-    },
-    "Idli": {
-        "stock": 50,
-        "alternative": "Vada"
-    },
-    "Vada": {
-        "stock": 50,
-        "alternative": "Idli"
-    },
-    "Uttapam": {
-        "stock": 49,
-        "alternative": "Masala Dosa"
-    },
-    "Pav Bhaji": {
-        "stock": 50,
-        "alternative": "Misal Pav"
-    },
-    "Misal Pav": {
-        "stock": 50,
-        "alternative": "Pav Bhaji"
-    },
-    "Dhokla": {
-        "stock": 50,
-        "alternative": "Khandvi"
-    },
-    "Thepla": {
-        "stock": 50,
-        "alternative": "Roti"
-    },
-    "Khandvi": {
-        "stock": 50,
-        "alternative": "Dhokla"
-    },
-    "Vada Pav": {
-        "stock": 50,
-        "alternative": "Samosa"
-    },
-    "Rajma Chawal": {
-        "stock": 50,
-        "alternative": "Dal Makhani"
-    },
-    "Chicken Tikka": {
-        "stock": 48,
-        "alternative": "Paneer Tikka"
-    },
-    "Mutton Rogan Josh": {
-        "stock": 50,
-        "alternative": "Butter Chicken"
-    },
-    "Fish Curry": {
-        "stock": 50,
-        "alternative": "Prawn Curry"
-    },
-    "Prawn Curry": {
-        "stock": 50,
-        "alternative": "Fish Curry"
-    },
-    "Tandoori Roti": {
-        "stock": 100,
-        "alternative": "Naan"
-    }
+    "Plain Masala Dosa": { "stock": 50, "alternative": "Mysore Masala Dosa" },
+    "Mysore Masala Dosa": { "stock": 50, "alternative": "Plain Masala Dosa" },
+    "Cheese Masala Dosa": { "stock": 50, "alternative": "Paneer Masala Dosa" },
+    "Paneer Masala Dosa": { "stock": 50, "alternative": "Cheese Masala Dosa" },
+    "Butter Masala Dosa": { "stock": 50, "alternative": "Plain Masala Dosa" },
+    "Paneer Tikka Sandwich": { "stock": 50, "alternative": "Veg Loaded Pizza" },
+    "Classic Butter Chicken": { "stock": 50, "alternative": "Smoky Butter Chicken" },
+    "Smoky Butter Chicken": { "stock": 50, "alternative": "Classic Butter Chicken" },
+    "Butter Chicken Boneless": { "stock": 50, "alternative": "Classic Butter Chicken" },
+    "Spicy Butter Chicken": { "stock": 50, "alternative": "Classic Butter Chicken" },
+    "Veg Loaded Pizza": { "stock": 50, "alternative": "Paneer Tikka Sandwich" },
+    "Amritsari Chole Bhature": { "stock": 50, "alternative": "Delhi Style Chole Bhature" },
+    "Delhi Style Chole Bhature": { "stock": 50, "alternative": "Amritsari Chole Bhature" },
+    "Paneer Chole Bhature": { "stock": 50, "alternative": "Amritsari Chole Bhature" },
+    "Extra Masala Chole Bhature": { "stock": 50, "alternative": "Amritsari Chole Bhature" },
+    "Veg Biryani": { "stock": 50, "alternative": "Paneer Biryani" },
+    "Paneer Biryani": { "stock": 50, "alternative": "Veg Biryani" },
+    "Chicken Biryani": { "stock": 50, "alternative": "Hyderabadi Dum Biryani" },
+    "Hyderabadi Dum Biryani": { "stock": 50, "alternative": "Chicken Biryani" },
+    "Mughlai Biryani": { "stock": 50, "alternative": "Hyderabadi Dum Biryani" },
+    "Classic Pav Bhaji": { "stock": 50, "alternative": "Cheese Pav Bhaji" },
+    "Cheese Pav Bhaji": { "stock": 50, "alternative": "Classic Pav Bhaji" },
+    "Paneer Pav Bhaji": { "stock": 50, "alternative": "Classic Pav Bhaji" },
+    "Khada Pav Bhaji": { "stock": 50, "alternative": "Classic Pav Bhaji" },
+    "Veg Momos": { "stock": 50, "alternative": "Paneer Momos" },
+    "Paneer Momos": { "stock": 50, "alternative": "Veg Momos" },
+    "Chicken Momos": { "stock": 50, "alternative": "Veg Momos" },
+    "Tandoori Momos": { "stock": 50, "alternative": "Veg Momos" },
+    "Schezwan Momos": { "stock": 50, "alternative": "Veg Momos" },
+    "Malai Kulfi": { "stock": 50, "alternative": "Gulab Jamun" },
+    "Kesar Pista Kulfi": { "stock": 50, "alternative": "Malai Kulfi" },
+    "Gulab Jamun": { "stock": 50, "alternative": "Malai Kulfi" },
+    "Rabdi": { "stock": 50, "alternative": "Gulab Jamun" },
+    "Brownie with Ice Cream": { "stock": 50, "alternative": "Gulab Jamun" },
+    "Mango Lassi": { "stock": 50, "alternative": "Sweet Lassi" },
+    "Sweet Lassi": { "stock": 50, "alternative": "Mango Lassi" },
+    "Masala Chaas": { "stock": 50, "alternative": "Sweet Lassi" },
+    "Cold Coffee": { "stock": 50, "alternative": "Oreo Shake" },
+    "Oreo Shake": { "stock": 50, "alternative": "Cold Coffee" },
+    "Masala Chai": { "stock": 50, "alternative": "Filter Coffee" },
+    "Filter Coffee": { "stock": 50, "alternative": "Masala Chai" },
+    "Green Tea": { "stock": 50, "alternative": "Masala Chai" }
 }
