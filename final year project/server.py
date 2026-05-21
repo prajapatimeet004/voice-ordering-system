@@ -11,7 +11,7 @@ import asyncio
 from typing import List, Optional, Dict, Any
 import json
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 import base64
 from audio_utils import safe_remove
 from ordering_workflow import transcribe_audio
@@ -73,6 +73,7 @@ def create_default_table_state():
     return {
         "confirmed": {},
         "pending_confirmation": None,
+        "pending_upsell": None,
         "last_response": "",
         "transcript_history": [],
         "stats": {
@@ -81,6 +82,61 @@ def create_default_table_state():
             "tables_booked": 1
         }
     }
+
+def get_upsell_item(order_items):
+    from classifier_service import MENU_CATEGORIES
+    categories = set()
+    for item in order_items.keys():
+        for cat, dishes in MENU_CATEGORIES.items():
+            if item in dishes:
+                categories.add(cat)
+                
+    suggestions = []
+    if "South Indian" in categories:
+        suggestions = ["Mango Lassi", "Sweet Lassi", "Gulab Jamun"]
+    elif "Punjabi" in categories:
+        suggestions = ["Sweet Lassi", "Masala Chaas", "Gulab Jamun"]
+    elif "Main Course" in categories:
+        suggestions = ["Gulab Jamun", "Mango Lassi", "Rabdi"]
+    elif "Pizza" in categories:
+        suggestions = ["Oreo Shake", "Cold Coffee", "Brownie with Ice Cream"]
+    elif "Rice" in categories:
+        suggestions = ["Gulab Jamun", "Rabdi", "Sweet Lassi"]
+    elif "Street Food" in categories:
+        suggestions = ["Masala Chaas", "Sweet Lassi", "Gulab Jamun"]
+    elif "Snacks" in categories:
+        suggestions = ["Mango Lassi", "Cold Coffee", "Oreo Shake"]
+    elif "Desserts" in categories:
+        suggestions = ["Filter Coffee", "Masala Chai", "Green Tea"]
+    elif "Drinks" in categories:
+        suggestions = ["Paneer Tikka Sandwich", "Veg Momos", "Paneer Momos"]
+    else:
+        suggestions = ["Gulab Jamun", "Mango Lassi", "Sweet Lassi"]
+
+    # Filter out items already in the order
+    for sug in suggestions:
+        if sug not in order_items:
+            is_avail, _ = inventory_service.check_availability(sug, 1)
+            if is_avail:
+                return sug
+
+    # Fallback to something that isn't ordered (just iterate over menu)
+    for item in ["Mango Lassi", "Gulab Jamun", "Sweet Lassi", "Veg Momos", "Paneer Tikka Sandwich"]:
+        if item not in order_items:
+            is_avail, _ = inventory_service.check_availability(item, 1)
+            if is_avail:
+                return item
+    return None
+
+def finalize_and_submit_order(table_state):
+    # Process each item in the order to update inventory stock
+    for dish_name, item_data in list(table_state["confirmed"].items()):
+        qty = item_data.get("quantity", 1)
+        inventory_service.update_stock(dish_name, -qty)
+    # Clear state
+    table_state["confirmed"] = {}
+    table_state["pending_confirmation"] = None
+    table_state["pending_upsell"] = None
 
 # Dictionary to store state for each table_id
 tables_state = defaultdict(create_default_table_state)
@@ -253,6 +309,7 @@ async def process_order_logic(transcript: str, table_id: str):
     Now handles corrections (like removal) first.
     """
     current_order_state = get_table_state(table_id)
+    unavailable_items = []
     try:
         # --- Unified Classification ---
         # Store transcript in history
@@ -275,9 +332,106 @@ async def process_order_logic(transcript: str, table_id: str):
         
         # --- Conversational Logic ---
         intent = result.get("intent")
+        
+        # Local intent override for reliability
+        clean_tx = transcript.lower().strip().replace(".", "").replace("!", "").replace(",", "")
+        affirmative_words = ["yes", "yeah", "yep", "yup", "sure", "ok", "okay", "ha", "haan", "theek hai", "thek hai", "ji", "chalshe", "chalse", "kar do", "thik che", "thik chhe", "haji", "haji add karo", "yes please", "yes add that"]
+        negative_words = ["no", "nope", "not that", "nahi", "na", "nathi", "nathi joitu", "nako", "nai", "no thanks", "no thank you", "nathi joiye", "nathi joitu", "na padse", "na padis"]
+        finishing_words = [
+            "done", "finished", "that's it", "bus", "bas", "bas itna hi", "itna hi dena", 
+            "itlu j", "pachi nai", "bas avu j", "order confirm", "my order is done", 
+            "order complete", "complete order", "aur kuch nahi chahiye", "kuch nahi chahiye", 
+            "nahi chahiye", "bas aur kuch nahi", "bas nahi chahiye", "biju kaik nahi", 
+            "biju nathi joitu", "biju kaik nathi joitu"
+        ]
+        
+        if clean_tx in affirmative_words:
+            intent = "affirmative"
+        elif clean_tx in negative_words:
+            intent = "negative"
+        elif clean_tx in finishing_words:
+            intent = "finishing"
+
         pending = current_order_state.get("pending_confirmation")
+        pending_upsell = current_order_state.get("pending_upsell")
         is_finished = result.get("is_finished", False)
+        lang_code = result.get("language_code", "hi-IN")
         response_text = ""
+
+        upsell_handled = False
+        if pending_upsell:
+            if intent == "affirmative":
+                is_available, stock = inventory_service.check_availability(pending_upsell, 1)
+                if is_available:
+                    current_order_state["confirmed"][pending_upsell] = {
+                        "dish": pending_upsell,
+                        "quantity": 1,
+                        "addons": []
+                    }
+                    if lang_code == "gu-IN":
+                        response_text = f"Saras! Ek {pending_upsell} add kari didhu che. Pooja Restaurant ma order karva badal aabhar!"
+                    else:
+                        response_text = f"Theek hai, ek {pending_upsell} add kar diya hai. Pooja Restaurant me order karne ke liye dhanyawad!"
+                else:
+                    if lang_code == "gu-IN":
+                        response_text = f"Saras! Pan {pending_upsell} available nathi. Pooja Restaurant ma order karva badal aabhar!"
+                    else:
+                        response_text = f"Theek hai, par {pending_upsell} abhi available nahi hai. Pooja Restaurant me order karne ke liye dhanyawad!"
+                
+                finalize_and_submit_order(current_order_state)
+                is_finished = True
+                upsell_handled = True
+            elif intent == "negative":
+                if lang_code == "gu-IN":
+                    response_text = f"Theek che, order finalize kari didhu che. Pooja Restaurant ma order karva badal aabhar!"
+                else:
+                    response_text = f"Theek hai, order finalize kar diya hai. Pooja Restaurant me order karne ke liye dhanyawad!"
+                
+                finalize_and_submit_order(current_order_state)
+                is_finished = True
+                upsell_handled = True
+            else:
+                current_order_state["pending_upsell"] = None
+
+        if intent == "finishing" and not upsell_handled:
+            confirmed_items = current_order_state["confirmed"]
+            if not confirmed_items:
+                if lang_code == "gu-IN":
+                    response_text = "Bhaiya, tame haji sudhi kai order nathi karyu. Pehla kaik order kari lyo."
+                else:
+                    response_text = "Bhaiya, aapne abhi tak kuch order nahi kiya hai. Pehle kuch order kar lijiye."
+            else:
+                summary_parts = []
+                for dish, data in confirmed_items.items():
+                    qty = data.get("quantity", 1)
+                    summary_parts.append(f"{qty} {dish}")
+                summary_str = " aur ".join(summary_parts) if lang_code != "gu-IN" else " ane ".join(summary_parts)
+                
+                upsell_dish = get_upsell_item(confirmed_items)
+                if upsell_dish:
+                    current_order_state["pending_upsell"] = upsell_dish
+                    if lang_code == "gu-IN":
+                        response_text = f"Aabhar! Tame order karyu che: {summary_str}. Shu hu tamari sathe ek {upsell_dish} add kari dav?"
+                    else:
+                        response_text = f"Thank you! Aapne order kiya hai: {summary_str}. Kya main iske sath ek {upsell_dish} add karu?"
+                else:
+                    if lang_code == "gu-IN":
+                        response_text = f"Aabhar! Tame order karyu che: {summary_str}. Pooja Restaurant ma order karva badal aabhar!"
+                    else:
+                        response_text = f"Thank you! Aapne order kiya hai: {summary_str}. Pooja Restaurant me order karne ke liye dhanyawad!"
+                    finalize_and_submit_order(current_order_state)
+                    is_finished = True
+            
+            result["response_text"] = response_text
+            result["items"] = []
+            result["modifications"] = []
+            intent = "none"
+
+        if upsell_handled:
+            result["response_text"] = response_text
+            result["items"] = []
+            result["modifications"] = []
+            intent = "none"
 
         confirmation_handled = False
         conf_response = ""
@@ -304,19 +458,28 @@ async def process_order_logic(transcript: str, table_id: str):
                 sug_qty = pending.get("quantity", 1)
                 sug_addons = pending.get("addons", [])
                 
-                if sug_dish in current_order_state["confirmed"]:
-                    current_order_state["confirmed"][sug_dish]["quantity"] += sug_qty
-                    current_order_state["confirmed"][sug_dish]["addons"] = merge_structured_addons(
-                        current_order_state["confirmed"][sug_dish]["addons"], 
-                        {a: "add" for a in sug_addons} if isinstance(sug_addons, list) else sug_addons
-                    )
+                # Check cumulative availability
+                current_qty = current_order_state["confirmed"][sug_dish]["quantity"] if sug_dish in current_order_state["confirmed"] else 0
+                target_qty = current_qty + sug_qty
+                is_available, stock = inventory_service.check_availability(sug_dish, target_qty)
+                
+                if is_available:
+                    if sug_dish in current_order_state["confirmed"]:
+                        current_order_state["confirmed"][sug_dish]["quantity"] += sug_qty
+                        current_order_state["confirmed"][sug_dish]["addons"] = merge_structured_addons(
+                            current_order_state["confirmed"][sug_dish]["addons"], 
+                            {a: "add" for a in sug_addons} if isinstance(sug_addons, list) else sug_addons
+                        )
+                    else:
+                        current_order_state["confirmed"][sug_dish] = {
+                            "dish": sug_dish, 
+                            "quantity": sug_qty, 
+                            "addons": sug_addons if isinstance(sug_addons, list) else merge_structured_addons([], sug_addons)
+                        }
+                    conf_response = f"Theek hai, adding {sug_qty} {sug_dish} to your order."
                 else:
-                    current_order_state["confirmed"][sug_dish] = {
-                        "dish": sug_dish, 
-                        "quantity": sug_qty, 
-                        "addons": sug_addons if isinstance(sug_addons, list) else merge_structured_addons([], sug_addons)
-                    }
-                conf_response = f"Theek hai, adding {sug_qty} {sug_dish} to your order."
+                    conf_response = response_service.get_availability_feedback_text([sug_dish])
+                    unavailable_items.append(sug_dish)
             
             current_order_state["pending_confirmation"] = None
             confirmation_handled = True
@@ -325,6 +488,11 @@ async def process_order_logic(transcript: str, table_id: str):
             current_order_state["pending_confirmation"] = None
             conf_response = "Theek hai, I won't add that."
             confirmation_handled = True
+            
+        elif pending and intent not in ["affirmative", "negative"]:
+            # If user ignores the confirmation and says something else
+            current_order_state["pending_confirmation"] = None
+            print("DEBUG: User ignored confirmation. Discarding pending item.")
 
         # --- Item & Modification Processing ---
         items_msg = result.get("response_text", "")
@@ -402,10 +570,13 @@ async def process_order_logic(transcript: str, table_id: str):
                         print(f"DEBUG: [GUARD] '{dish_name}' already in order, no addons and no addition words — skipping.")
                     continue  # Do NOT add as new item
 
-                # Check Availability (only for genuinely new items)
-                is_available, _ = inventory_service.check_availability(dish_name, qty)
+                # Check cumulative availability
+                current_qty = current_order_state["confirmed"][dish_name]["quantity"] if dish_name in current_order_state["confirmed"] else 0
+                target_qty = current_qty + qty
+                is_available, stock = inventory_service.check_availability(dish_name, target_qty)
                 if not is_available:
-                    print(f"DEBUG: {dish_name} is OUT OF STOCK. Not adding.")
+                    print(f"DEBUG: {dish_name} target quantity {target_qty} exceeds stock {stock}. Not adding.")
+                    unavailable_items.append(dish_name)
                     continue
                 
                 print(f"DEBUG: Adding '{dish_name}' (qty: {qty}) to confirmed order for table '{table_id}'")
@@ -472,13 +643,19 @@ async def process_order_logic(transcript: str, table_id: str):
                         matched_new, score, _ = fuzzy_match_dish(new_item_name)
                         if score > 0.3:
                             qty = current_order_state["confirmed"][matched_target]["quantity"]
-                            del current_order_state["confirmed"][matched_target]
-                            current_order_state["confirmed"][matched_new] = {
-                                "dish": matched_new, 
-                                "quantity": qty, 
-                                "addons": [f"{k}: {v}" for k, v in changes_dict.items() if k != "new_item"]
-                            }
-                            print(f"DEBUG: Replaced '{matched_target}' with '{matched_new}'")
+                            # Check availability of new item before replacing
+                            is_available, stock = inventory_service.check_availability(matched_new, qty)
+                            if is_available:
+                                del current_order_state["confirmed"][matched_target]
+                                current_order_state["confirmed"][matched_new] = {
+                                    "dish": matched_new, 
+                                    "quantity": qty, 
+                                    "addons": [f"{k}: {v}" for k, v in changes_dict.items() if k != "new_item"]
+                                }
+                                print(f"DEBUG: Replaced '{matched_target}' with '{matched_new}'")
+                            else:
+                                print(f"DEBUG: Replace target '{matched_new}' quantity {qty} exceeds stock {stock}.")
+                                unavailable_items.append(matched_new)
 
                 elif action in ["update", "add"]:
                     # Update addons or quantity
@@ -496,11 +673,24 @@ async def process_order_logic(transcript: str, table_id: str):
                     if "quantity" in changes_dict:
                         qty_val = changes_dict.pop("quantity")
                         if isinstance(qty_val, int) or (isinstance(qty_val, str) and qty_val.isdigit()):
-                            existing["quantity"] = int(qty_val)
+                            val_qty = int(qty_val)
+                            # Check if the context implies relative addition
+                            is_relative = any(kw in transcript.lower() for kw in ADDITION_KEYWORDS) or any(w in transcript.lower() for w in ["add", "aur", "bija", "biju", "more"])
+                            target_qty = existing["quantity"] + val_qty if is_relative else val_qty
                         elif str(qty_val).lower() == "increase":
-                            existing["quantity"] += 1
+                            target_qty = existing["quantity"] + 1
                         elif str(qty_val).lower() == "decrease":
-                            existing["quantity"] = max(1, existing["quantity"] - 1)
+                            target_qty = max(1, existing["quantity"] - 1)
+                        else:
+                            target_qty = existing["quantity"]
+                        
+                        # Validate stock for target_qty
+                        is_available, stock = inventory_service.check_availability(matched_target, target_qty)
+                        if is_available:
+                            existing["quantity"] = target_qty
+                        else:
+                            print(f"DEBUG: Modification of '{matched_target}' target quantity {target_qty} exceeds stock {stock}. Rejecting change.")
+                            unavailable_items.append(matched_target)
                     
                     # Use merge_structured_addons for all other changes (addons)
                     if changes_dict:
@@ -515,7 +705,9 @@ async def process_order_logic(transcript: str, table_id: str):
 
 
         # --- Final Response Construction ---
-        if result.get("response_text") and not (intent in ["affirmative", "negative"] and pending):
+        if unavailable_items:
+            response_text = response_service.get_availability_feedback_text(unavailable_items)
+        elif result.get("response_text") and not (intent in ["affirmative", "negative"] and pending):
             # If LLM gave a full response and it's not a simple confirmation, trust it
             response_text = result["response_text"]
         else:
@@ -534,33 +726,16 @@ async def process_order_logic(transcript: str, table_id: str):
             sug = result["needs_confirmation"][0]
             response_text += " " + response_service.get_confirm_text(sug["suggested"], sug["original"])
         
-        # Determine language for TTS
+        # Determine language for TTS (stored for caller to use)
         lang_code = result.get("language_code", "hi-IN")
-        
-        # Generate TTS
-        speech_b64 = await generate_speech(response_text, language_code=lang_code)
-        
-        # --- Server-side Playback (for zero-latency "Call" feel) ---
-        if speech_b64:
-            try:
-                # Play in a separate thread so we don't block the response
-                def play_async():
-                    try:
-                        if winsound:
-                            winsound.PlaySound(base64.b64decode(speech_b64), winsound.SND_MEMORY)
-                    except: pass
-                
-                asyncio.create_task(asyncio.to_thread(play_async))
-            except Exception as e:
-                print(f"Server playback error: {e}")
 
         asyncio.create_task(dashboard_manager.broadcast())
         return {
             "classification": result,
             "response_text": response_text,
-            "speech": speech_b64,
             "current_order": current_order_state["confirmed"],
-            "is_finished": is_finished
+            "is_finished": is_finished,
+            "language_code": lang_code
         }
     except Exception as e:
         import traceback
@@ -692,6 +867,16 @@ async def ws_stream_audio(websocket: WebSocket, table_id: str = "default"):
                         audio_chunks = []
                         table_id = data.get("table_id", table_id)
                     elif data.get("action") == "stop":
+                        total_bytes = sum(len(chunk) for chunk in audio_chunks)
+                        if total_bytes < 3000:
+                            print(f"DEBUG: Received audio is too short or empty ({total_bytes} bytes). Skipping transcription.")
+                            try:
+                                await websocket.send_json({"error": "No speech detected.", "transcript": ""})
+                            except:
+                                break
+                            audio_chunks = []
+                            continue
+                            
                         if audio_chunks:
                             import tempfile
                             with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp_audio:
@@ -717,11 +902,25 @@ async def ws_stream_audio(websocket: WebSocket, table_id: str = "default"):
                                                 raise classify_err
                                     if result:
                                         result["transcript"] = transcript
+                                        # Message 1: Send text result IMMEDIATELY (no TTS wait)
                                         try:
                                             await websocket.send_json(result)
                                         except (WebSocketDisconnect, RuntimeError) as e:
                                             logging.info(f"WS Client disconnected during result delivery: {e}")
                                             break
+                                        
+                                        # Message 2: Generate TTS and send speech separately
+                                        try:
+                                            tts_lang = result.get("language_code", "hi-IN")
+                                            tts_text = result.get("response_text", "")
+                                            if tts_text:
+                                                speech_b64 = await generate_speech(tts_text, language_code=tts_lang)
+                                                if speech_b64:
+                                                    await websocket.send_json({"type": "tts_audio", "speech": speech_b64})
+                                        except (WebSocketDisconnect, RuntimeError):
+                                            break
+                                        except Exception as tts_err:
+                                            print(f"TTS generation error: {tts_err}")
                                     else:
                                         try:
                                             await websocket.send_json({"error": "Classification failed.", "transcript": transcript})

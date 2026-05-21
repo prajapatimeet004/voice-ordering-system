@@ -153,13 +153,6 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
                     mapped_new = mapped_new.strip()
                     
                     if score_new >= 0.30:
-                        # Check Availability
-                        is_avail, stock = inventory_service.check_availability(mapped_new, qty)
-                        if not is_avail:
-                            print(f"DEBUG Correction: '{mapped_new}' is out of stock.")
-                            unavailable_list.append(mapped_new)
-                            if stock <= 0: continue
-                        
                         existing_val = final_confirmed_order.get(mapped_new, {"quantity": 0, "addons": []})
                         if not isinstance(existing_val, dict): existing_val = {"quantity": existing_val, "addons": []}
                         
@@ -167,6 +160,13 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
                             final_qty = existing_val["quantity"] + qty
                         else:
                             final_qty = qty
+                            
+                        # Check Availability against final cumulative quantity
+                        is_avail, stock = inventory_service.check_availability(mapped_new, final_qty)
+                        if not is_avail:
+                            print(f"DEBUG Correction: '{mapped_new}' target quantity {final_qty} exceeds stock {stock}.")
+                            unavailable_list.append(mapped_new)
+                            continue
                             
                         # Granular Addon Management
                         new_addons_list = corr.get("addons", [])
@@ -221,14 +221,18 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
                             target_dish = match[0]
 
                 if target_dish:
-                    # Check Availability if increasing qty
-                    if is_rel and qty > 0:
-                        is_avail, _ = inventory_service.check_availability(target_dish, qty)
-                        if not is_avail: unavailable_list.append(target_dish)
-
                     val = final_confirmed_order[target_dish]
                     if not isinstance(val, dict): val = {"quantity": val, "addons": []}
                     final_qty = val["quantity"] + qty if is_rel else qty
+                    
+                    # Check Availability if increasing qty
+                    if final_qty > val["quantity"]:
+                        is_avail, stock = inventory_service.check_availability(target_dish, final_qty)
+                        if not is_avail:
+                            print(f"DEBUG Correction: '{target_dish}' target quantity {final_qty} exceeds stock {stock}.")
+                            unavailable_list.append(target_dish)
+                            final_qty = val["quantity"]  # Do not increase quantity
+                    
                     val["quantity"] = final_qty
                         
                     # Handle addons...
@@ -305,10 +309,15 @@ def apply_confirmed_corrections(final_confirmed_order, confirmed_corrections):
 
             if target:
                 final_qty = final_confirmed_order[target]["quantity"] + qty if is_rel else qty
-                if is_rel and qty > 0:
-                    is_avail, _ = inventory_service.check_availability(target, qty)
-                    if not is_avail: unavailable_list.append(target)
-
+                
+                # Check Availability if increasing qty
+                if final_qty > final_confirmed_order[target]["quantity"]:
+                    is_avail, stock = inventory_service.check_availability(target, final_qty)
+                    if not is_avail:
+                        print(f"DEBUG Correction: '{target}' target quantity {final_qty} exceeds stock {stock}.")
+                        unavailable_list.append(target)
+                        continue  # Skip quantity change
+                
                 if final_qty <= 0:
                     del final_confirmed_order[target]
                 else:

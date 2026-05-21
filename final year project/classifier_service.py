@@ -546,7 +546,7 @@ def _initialize_hybrid_matching():
     print(f"DEBUG: Hybrid System Initialized. Keyword map size: {len(_KEYWORD_MAP)}")
 
 # Eager initialization to avoid first-request lag
-_initialize_hybrid_matching()
+# _initialize_hybrid_matching() # STAGE 2 REMOVED: LLM NOW HANDLES MATCHING
 
 def match_dish_with_embeddings(dish_name: str):
     """
@@ -657,8 +657,10 @@ def match_dish_with_embeddings(dish_name: str):
 def fuzzy_match_dish(dish_name: str):
     """
     Primary matching function using the Hybrid approach.
+    (STAGE 2 COMMENTED OUT: LLM now handles all matching)
     """
-    return match_dish_with_embeddings(dish_name)
+    # return match_dish_with_embeddings(dish_name)
+    return dish_name, 1.0, False # Pass-through
 
 # Pre-defined Response Schema for Order Classification (Updated)
 CLASSIFICATION_SCHEMA = {
@@ -670,8 +672,9 @@ CLASSIFICATION_SCHEMA = {
             "items": {
                 "type": "OBJECT",
                 "properties": {
-                    "name": {"type": "STRING", "description": "Standardized dish name"},
+                    "name": {"type": "STRING", "description": "Standardized dish name exactly as in menu (or best guess if partial)"},
                     "quantity": {"type": "INTEGER", "description": "Number of units"},
+                    "is_ambiguous": {"type": "BOOLEAN", "description": "True if user said a partial name (e.g., 'Dosa') or you are unsure about the exact menu match."},
                     "addons": {
                         "type": "ARRAY",
                         "items": {
@@ -684,7 +687,7 @@ CLASSIFICATION_SCHEMA = {
                         }
                     }
                 },
-                "required": ["name", "quantity", "addons"]
+                "required": ["name", "quantity", "is_ambiguous", "addons"]
             }
         },
         "modifications": {
@@ -898,20 +901,25 @@ Detect the language of the customer's input and ALWAYS reply in the SAME languag
    - If a user says "without X", "no X", "X nathi joiye", "X mat dena", use `value: "remove"`.
    - If a user swaps an addon (e.g., "cheese ni badle butter"), output a `remove` for "cheese" and an `add` for "butter".
    - Intelligently attach addons to the most relevant item in the `Current Order`.
+   - **ADDON CONFIRMATION (CRITICAL)**: ALWAYS confirm addon changes in your `response_text`. Repeat back EXACTLY what you are adding/removing/swapping. Example: "Theek hai, Mysore Masala Dosa mese chutney hatavi ne extra sambhar add kari didhu." This way the user can catch mistakes.
+   - **ADDON SPELLING**: Use the ENGLISH standard spelling for addon types (e.g., "chutney" not "chatni", "sambhar" not "sambar", "onion" not "kanda"). This helps the backend match correctly.
 
 4. **OUTPUT SCHEMA**:
    - Always use ARRAYS `[]` for `addons` and `changes`.
    - `addons`: [{"type": "butter", "value": "extra"}] or [{"type": "spicy", "value": "remove"}]
    - `changes`: [{"type": "quantity", "value": "2"}]
 
-5. **STRICT MENU ADHERENCE**:
-   - If a user asks for an item NOT in the provided {AVAILABLE_MENU} (e.g., Pasta, Sushi, etc.), you MUST NOT add it to the `items` list.
-   - Instead, apologize in Gujlish/Hindi and inform them it is not available.
-    - If a user asks for a generic category (e.g., just "Biryani", "Dosa", "Momos") WITHOUT specifying which one, you MUST list the options (e.g., "We have Mysore, Plain, and Cheese Dosa. Which one?").
-    - If a user SPECIFIES a specific variant (e.g., "Ek Veg Biryani" or "Ek Mysore Masala Dosa"), you MUST CONFIRM it immediately and suggest a relevant addon. 
-    - **CRITICAL**: If a specific variant is mentioned, DO NOT ask the user to choose from other variants.
-    - Example: "Theek hai, ek Veg Biryani. Sathe extra raita ya salan aapu?" (OK, one Veg Biryani. Should I give extra raita or salan with it?)
-    - ALWAYS suggest at least one relevant addon or customization for every item ordered.
+5. **STRICT MENU ADHERENCE & MATCHING**:
+   - You MUST match the user's requested item to the EXACT name in {AVAILABLE_MENU}.
+   - If a user asks for an item NOT in the provided {AVAILABLE_MENU} (e.g., Pasta, Sushi, etc.), you MUST NOT add it to the `items` list. Instead, apologize in Gujlish/Hindi and inform them it is not available.
+   - **AMBIGUITY CHECK**: If the user asks for a generic category (e.g., just "Biryani", "Dosa", "Momos") WITHOUT specifying which one, OR if they say a partial name that matches multiple items, you MUST set `is_ambiguous: true` and list the options in the `response_text`.
+   - If they specify a clear, exact variant (e.g., "Ek Veg Biryani" or "Ek Mysore Masala Dosa"), you MUST set `is_ambiguous: false`. DO NOT ask the user to choose from other variants if they are specific.
+   - Example: "Theek hai, ek Veg Biryani. Sathe extra raita ya salan aapu?"
+   - ALWAYS suggest at least one relevant addon or customization for every item ordered.
+
+6. **FINISHING INTENT**:
+   - If the user says they are done, finished, want to complete/confirm their order, or want nothing else (e.g. "my order is done", "that's it", "nothing else", "bas", "bas itna hi", "itlu j che", "havve kaik nai", "order complete", "aur kuch nahi chahiye", "nahi chahiye", "biju nathi joitu"), set `intent: "finishing"`.
+   - **CRITICAL**: When the user is finishing their order, your `response_text` MUST NOT ask "anything else?", "aur kuch chahiye?", "biju kai?", or similar questions. Instead, summarize the order and say thank you.
 
 ---
 
@@ -925,6 +933,7 @@ Output: {
     {
       "name": "Masala Dosa",
       "quantity": 1,
+      "is_ambiguous": true,
       "addons": [{ "type": "onion", "value": "remove" }]
     }
   ],
@@ -1052,6 +1061,15 @@ Proactively suggest based on context. Keep it SHORT — one line max.
    - Pizza -> Cheese Burst?
 3. **Natural Flow**: Don't be a robot. Ask like a friendly waiter. "Bhaai, Dosa ma Mysore, Cheese, ya Paneer valu aapu? Ane butter badhu nakhvu che?"
 
+## 🚫 BOUNDARY RULES (CRITICAL - NEVER VIOLATE)
+1. **You are ONLY a restaurant waiter.** You can ONLY help with: taking orders, modifying orders, answering menu questions, and giving food recommendations.
+2. **NEVER repeat or parrot the user's words back as your response.** Always generate your OWN natural waiter response.
+3. **Complaints / Threats / Abuse**: If a user makes threats, complaints, or abusive remarks, respond CALMLY and POLITELY. Example: "Bhai, maaf karo. Main sirf order lene ke liye hoon. Agar koi problem hai toh manager se baat kar sakte ho. Abhi kya order karna hai?"
+4. **Non-menu food demands**: If a user demands food NOT on the menu (e.g., "give me non-veg", "I want pizza hut"), politely inform them what IS available. Example: "Maaf karjo bhai, amara menu ma non-veg nathi. Pan amara pase Paneer Tikka, Veg Biryani jeva tasty options che. Try karso?"
+5. **Off-topic requests** (politics, personal questions, jokes, etc.): Politely redirect. Example: "Haha bhai, main toh sirf khana serve karta hoon! Batao kya khana hai?"
+6. **NEVER add items to the order that are NOT in the menu**, even if the user insists or threatens.
+7. **NEVER generate responses longer than 3 sentences.** Keep it short, polite, and redirect to ordering.
+
 ## 🧾 RESPONSE FORMAT RULES
 1. MAX 2-3 short sentences per reply.
 2. Confirm what you did + ASK for the missing details (variant/addon).
@@ -1176,6 +1194,8 @@ Proactively suggest based on context. Keep it SHORT — one line max.
             
             dish = item.get("name")
             qty = item.get("quantity", 1)
+            is_ambiguous = item.get("is_ambiguous", False)
+            
             # Addons are now a dictionary from the LLM
             # Convert structured array back to dictionary for backend compatibility
             addons_list = item.get("addons", [])
@@ -1184,13 +1204,10 @@ Proactively suggest based on context. Keep it SHORT — one line max.
             else:
                 addons_dict = {}
 
-            # Map dish name
-            mapped_dish, dish_score, is_ambiguous = fuzzy_match_dish(dish)
-            
-            # Filter out junk item matches
-            if not is_ambiguous and dish_score < 0.30 and len(dish.split()) > 2:
-                print(f"DEBUG: Skipping false item extraction for '{dish}' (score: {dish_score})")
-                continue
+            # STAGE 2 REMOVED: Map dish name (now just a pass-through)
+            # We trust the LLM's 'dish' output and its 'is_ambiguous' flag
+            mapped_dish = dish
+            dish_score = 1.0 if not is_ambiguous else 0.8
             
             item_end = time.perf_counter()
             print(f"DEBUG: [TIME] Processed item '{mapped_dish}' in {(item_end - item_start)*1000:.2f}ms")
@@ -1219,7 +1236,7 @@ Proactively suggest based on context. Keep it SHORT — one line max.
 
             # Processed item object
             processed_item = {
-                "dish": mapped_dish.strip() if dish_score >= 0.10 else dish.strip(),
+                "dish": mapped_dish.strip(),
                 "quantity": qty,
                 "portion": "full",
                 "modified_addons": validated_addons, 
@@ -1230,17 +1247,8 @@ Proactively suggest based on context. Keep it SHORT — one line max.
             if rejected_addons:
                 final_order_result["response_text"] += f" (Maaf karjo, pan {', '.join(rejected_addons)} {mapped_dish} sathe nathi malshye.)"
             
-            # --- NEW: Raw Transcript Guard ---
-            # If the LLM guessed a multi-word name but only one word was said, force confirm
-            raw_clean = re.sub(r'[^a-zA-Z0-9\s]', '', transcript).lower()
-            dish_clean = re.sub(r'[^a-zA-Z0-9\s]', '', processed_item["dish"]).lower()
-            is_partial_in_raw = (dish_clean not in raw_clean) and any(word in raw_clean for word in dish_clean.split())
-            
-            # Threshold checks
-            AUTO_REPLACE_THRESHOLD = 0.88 # Higher for auto-confirm
-            MIN_CONFIDENCE_THRESHOLD = 0.72 # Higher for even suggesting
-
-            if is_ambiguous or is_partial_in_raw or (dish_score >= MIN_CONFIDENCE_THRESHOLD and dish_score < AUTO_REPLACE_THRESHOLD):
+            # Threshold checks: We rely on the LLM's `is_ambiguous` flag.
+            if is_ambiguous:
                 # Suggest item for confirmation
                 final_order_result["items"].append(processed_item) # ADDED HERE
                 final_order_result["needs_confirmation"].append({
@@ -1250,21 +1258,13 @@ Proactively suggest based on context. Keep it SHORT — one line max.
                     "score": round(dish_score, 2),
                     "addons": processed_item["addons"]
                 })
-            elif dish_score >= AUTO_REPLACE_THRESHOLD:
+            else:
                 # Auto-confirm high confidence
                 final_order_result["items"].append(processed_item) # ADDED HERE
                 final_order_result["confirmed"][processed_item["dish"]] = {
                     "quantity": qty,
                     "addons": processed_item["addons"]
                 }
-            else: # Below MIN_CONFIDENCE_THRESHOLD
-                # Unknown dish - Ask to repeat or explicitly state not in menu
-                final_order_result["not_in_menu"].append(dish)
-                # Overwrite response text to be explicit about menu absence
-                if dish_score < 0.25:
-                    final_order_result["response_text"] = f"Maaf karjo, '{dish}' amara menu ma nathi. Tamare biju kai joie che? (Sorry, '{dish}' is not in our menu. Would you like something else?)"
-                else:
-                    final_order_result["response_text"] = f"Maaf karjo, '{dish}' khabar na padi. Ek vaar menu check kari ne fari bolsho? (Sorry, I didn't catch '{dish}'. Could you check the menu and say it again?)"
 
         # Store modifications for server processing
         final_order_result["modifications"] = extracted_modifications

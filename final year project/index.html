@@ -806,16 +806,38 @@
                 transcriptEl.innerText = "Timeout. Try again.";
             }, 60000);
 
+            // Track pending result for TTS audio message
+            let pendingResult = null;
+
             audioWs.onmessage = (e) => {
-                clearTimeout(wsResponseTimeout);
                 let cResult;
                 try { cResult = JSON.parse(e.data); } catch { return; }
 
-                // Always reset processing state first — then handle response
+                // Helper to unlock VAD
                 const unlockVAD = () => { isProcessing = false; isSpeaking = false; setVADStatus('active'); };
 
+                // Message 2: TTS audio arrived separately
+                if (cResult.type === "tts_audio" && cResult.speech) {
+                    const audio = new Audio(`data:audio/mp3;base64,${cResult.speech}`);
+                    const onAudioDone = () => {
+                        if (pendingResult && pendingResult.is_finished) {
+                            setTimeout(() => {
+                                alert("Order submitted successfully!");
+                                location.reload();
+                            }, 500);
+                        }
+                    };
+                    audio.onended = onAudioDone;
+                    audio.onerror = onAudioDone;
+                    audio.play().catch(onAudioDone);
+                    return;
+                }
+
+                // Message 1: Text result — show immediately
+                clearTimeout(wsResponseTimeout);
+                pendingResult = cResult;
+
                 if (cResult.error) {
-                    // Server errors: no audio chunks, no speech, classification fail, etc.
                     const errMsg = cResult.error;
                     if (errMsg.includes('No audio') || errMsg.includes('No speech')) {
                         transcriptEl.innerText = "No speech detected. Please try again.";
@@ -830,13 +852,16 @@
 
                 if (cResult.transcript) transcriptEl.innerText = `"${cResult.transcript}"`;
                 replyEl.innerText = cResult.response_text || "Order updated!";
-                if (cResult.speech) {
-                    const audio = new Audio(`data:audio/wav;base64,${cResult.speech}`);
-                    audio.onended = unlockVAD;
-                    audio.onerror = unlockVAD;
-                    audio.play().catch(unlockVAD);
-                } else {
-                    unlockVAD();
+                
+                // Unlock VAD immediately — audio will play when it arrives
+                unlockVAD();
+                
+                // If no TTS will come (e.g. finished without speech), handle finish
+                if (cResult.is_finished && !cResult.response_text) {
+                    setTimeout(() => {
+                        alert("Order submitted successfully!");
+                        location.reload();
+                    }, 500);
                 }
             };
 

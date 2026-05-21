@@ -332,7 +332,14 @@ def merge_structured_addons(current_addons: list, new_addons_input) -> list:
     
     final_addons = set(current_addons)
     
-    for category, action in new_addons_dict.items():
+    for raw_category, action in new_addons_dict.items():
+        # Normalize the LLM category string (e.g. 'chatni' -> 'chutney')
+        category, _ = exact_match(str(raw_category).lower())
+        if not category:
+            category, _ = fuzzy_match(str(raw_category).lower())
+        if not category:
+            category = str(raw_category).lower()
+
         # --- NORMALIZATION: Convert friendly words to technical actions ---
         action = str(action).lower().strip()
         if action in ["extra", "more", "vadhu", "vadhare", "jyada", "add"]:
@@ -377,6 +384,14 @@ def merge_structured_addons(current_addons: list, new_addons_input) -> list:
                     display_name = friendly.get(category, category)
                     
                 final_addons.add(display_name)
+        
+        elif action not in ["remove", "remove_action", "swap", "increase", "decrease", "add"]:
+            # FALLBACK: Unrecognized action (e.g., "steamed", "grilled", "fried")
+            # Treat the action value itself as the addon display name
+            display_name = str(action).strip()
+            if display_name:
+                final_addons.add(display_name)
+                print(f"DEBUG: [ADDON] Unknown action '{action}' for category '{category}' — added as direct addon: '{display_name}'")
     
     return list(final_addons)
 
