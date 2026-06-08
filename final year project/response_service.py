@@ -74,3 +74,47 @@ def get_correction_feedback_text(corrections: List[Dict]) -> str:
         feedback = "Theek hai, " + parts[0]
         
     return feedback + "."
+
+
+def get_time_based_greeting(lang_code: str = "hi-IN") -> str:
+    """
+    Returns a real-time, context-aware greeting based on India Standard Time (IST).
+    Picks Good Morning / Good Afternoon / Good Evening depending on the hour.
+    """
+    from datetime import datetime, timezone, timedelta
+
+    # India Standard Time = UTC+5:30
+    IST = timezone(timedelta(hours=5, minutes=30))
+    hour = datetime.now(IST).hour
+
+    if 5 <= hour < 12:
+        slot = "morning"
+    elif 12 <= hour < 17:
+        slot = "afternoon"
+    elif 17 <= hour < 21:
+        slot = "evening"
+    else:
+        slot = "night"
+
+    greetings = {
+        "gu-IN": {
+            "morning":   "Shubh Savaar!",
+            "afternoon": "Shubh Bapor!",
+            "evening":   "Shubh Saanj!",
+            "night":     "Shubh Raatri!",
+        },
+        "hi-IN": {
+            "morning":   "Shubh Prabhat!",
+            "afternoon": "Shubh Dopahar!",
+            "evening":   "Shubh Sandhya!",
+            "night":     "Shubh Ratri!",
+        },
+        "en-IN": {
+            "morning":   "Good morning!",
+            "afternoon": "Good afternoon!",
+            "evening":   "Good evening!",
+            "night":     "Good evening!",
+        },
+    }
+
+    return greetings.get(lang_code, greetings["hi-IN"])[slot]

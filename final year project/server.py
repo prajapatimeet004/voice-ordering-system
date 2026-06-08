@@ -335,7 +335,45 @@ async def process_order_logic(transcript: str, table_id: str):
         
         # Local intent override for reliability
         clean_tx = transcript.lower().strip().replace(".", "").replace("!", "").replace(",", "")
-        affirmative_words = ["yes", "yeah", "yep", "yup", "sure", "ok", "okay", "ha", "haan", "theek hai", "thek hai", "ji", "chalshe", "chalse", "kar do", "thik che", "thik chhe", "haji", "haji add karo", "yes please", "yes add that"]
+        affirmative_words = [
+            # English
+            "yes", "yeah", "yep", "yup", "yess", "yesss", "sure", "ok", "okay", "okey",
+            "alright", "right", "fine", "absolutely", "definitely", "of course", "go ahead",
+            "yes please", "yes add that", "add it", "add that", "add karo", "add kar do",
+            # Hindi
+            "ha", "haa", "haan", "hanji", "han ji", "ji", "ji ha", "ji haan",
+            "theek hai", "thek hai", "theek he", "thik hai", "thik he",
+            "kar do", "karo", "kar dena", "kardo", "kar dijiye", "kariye",
+            "kari do", "kari dena", "kari dijiye",
+            "de do", "dedo", "de dena", "de dijiye",
+            "laga do", "lagado", "laga dena", "lagao",
+            "rakh do", "rakhdo", "rakh dena", "rakho",
+            "daal do", "daaldo", "daal dena", "daalo",
+            "bilkul", "zaroor", "zarur", "pakka",
+            "sahi hai", "sahi he", "accha", "acha",
+            "ban jaye", "ban jayega", "chalo",
+            # Gujarati
+            "chalshe", "chalse", "chale", "chaalse", "chaalshe",
+            "thik che", "thik chhe", "theek che", "theek chhe", "barabar che",
+            "haji", "ha ji", "haa ji",
+            "karo", "kari do", "kari nakh", "kari nakho", "kari de",
+            "mukjo", "muki do", "muki de", "nakho", "nakhi do", "nakhi de",
+            "rakhjo", "rakhje", "rakhi do", "rakhi de",
+            "bhari do", "bhari de", "bharjo", "bharje",
+            "haji add karo", "ha add karo", "ha kari do", "ha kar do",
+            "ho", "hoy", "avse", "aa avse", "banne",
+        ]
+        # Check exact match first
+        if clean_tx in affirmative_words:
+            intent = "affirmative"
+        # Also check if transcript starts with or contains a short affirmative phrase
+        elif any(clean_tx.startswith(w + " ") or clean_tx.endswith(" " + w) for w in [
+            "yes", "yeah", "ha", "haa", "haan", "hanji", "ji", "ok", "okay", "sure",
+            "theek hai", "thek hai", "thik hai", "chalshe", "chalse", "thik che",
+            "kari do", "kar do", "karo", "haji", "bilkul", "zaroor", "pakka", "accha"
+        ]):
+            intent = "affirmative"
+
         negative_words = ["no", "nope", "not that", "nahi", "na", "nathi", "nathi joitu", "nako", "nai", "no thanks", "no thank you", "nathi joiye", "nathi joitu", "na padse", "na padis"]
         finishing_words = [
             "done", "finished", "that's it", "bus", "bas", "bas itna hi", "itna hi dena", 
@@ -344,19 +382,42 @@ async def process_order_logic(transcript: str, table_id: str):
             "nahi chahiye", "bas aur kuch nahi", "bas nahi chahiye", "biju kaik nahi", 
             "biju nathi joitu", "biju kaik nathi joitu"
         ]
-        
-        if clean_tx in affirmative_words:
-            intent = "affirmative"
-        elif clean_tx in negative_words:
+
+        if intent != "affirmative" and clean_tx in negative_words:
             intent = "negative"
-        elif clean_tx in finishing_words:
+        elif intent != "affirmative" and clean_tx in finishing_words:
             intent = "finishing"
+
+        # Local greeting override — catches hello/hi before LLM can mis-classify
+        greeting_words = [
+            "hello", "hi", "hey", "namaste", "namaskar", "halo", "helo",
+            "good morning", "good afternoon", "good evening", "good night",
+            "kem cho", "kem chho", "kaise ho", "kya haal hai", "suprabhat",
+            "shubh prabhat", "shubh sandhya", "aavjo", "jai shree krishna"
+        ]
+        if any(clean_tx == g or clean_tx.startswith(g + " ") for g in greeting_words) or intent == "greeting":
+            intent = "greeting"
 
         pending = current_order_state.get("pending_confirmation")
         pending_upsell = current_order_state.get("pending_upsell")
         is_finished = result.get("is_finished", False)
         lang_code = result.get("language_code", "hi-IN")
         response_text = ""
+
+        # --- Greeting handling ---
+        if intent == "greeting":
+            lang_code = result.get("language_code", "hi-IN")
+            time_greet = response_service.get_time_based_greeting(lang_code=lang_code)
+            if lang_code == "gu-IN":
+                response_text = f"{time_greet} Hu Bhaiya chhu — Pooja Restaurant ma aapnu swagat che! Kaho, shu order karvu che?"
+            elif lang_code == "hi-IN":
+                response_text = f"{time_greet} Main Bhaiya hoon — Pooja Restaurant mein aapka swagat hai! Batao, kya order karna hai?"
+            else:
+                response_text = f"{time_greet} I'm Bhaiya, your waiter at Pooja Restaurant! What would you like to order today?"
+            result["response_text"] = response_text
+            result["items"] = []
+            result["modifications"] = []
+            intent = "none"
 
         upsell_handled = False
         if pending_upsell:

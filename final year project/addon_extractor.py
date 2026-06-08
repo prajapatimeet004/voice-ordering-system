@@ -338,6 +338,11 @@ def merge_structured_addons(current_addons: list, new_addons_input) -> list:
         if not category:
             category, _ = fuzzy_match(str(raw_category).lower())
         if not category:
+            # Check if we can extract category from raw phrase (e.g. 'extra butter' -> 'butter')
+            extracted = extract_addons(str(raw_category).lower())["addons"]
+            if extracted:
+                category = next(iter(extracted.keys()))
+        if not category:
             category = str(raw_category).lower()
 
         # --- NORMALIZATION: Convert friendly words to technical actions ---

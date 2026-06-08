@@ -74,6 +74,17 @@ def get_cerebras_client():
         )
     return _cerebras_client
 
+_groq_client = None
+
+def get_groq_client():
+    global _groq_client
+    if _groq_client is None:
+        from groq import AsyncGroq
+        GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+        _groq_client = AsyncGroq(api_key=GROQ_API_KEY)
+    return _groq_client
+
+
 
 
 _gemini_model = None
@@ -666,7 +677,7 @@ def fuzzy_match_dish(dish_name: str):
 CLASSIFICATION_SCHEMA = {
     "type": "OBJECT",
     "properties": {
-        "intent": {"type": "STRING", "enum": ["new_order", "modify_order", "affirmative", "negative", "finishing", "recommendation", "question", "none"], "description": "Type of intent extracted"},
+        "intent": {"type": "STRING", "enum": ["new_order", "modify_order", "affirmative", "negative", "finishing", "recommendation", "question", "greeting", "none"], "description": "Type of intent extracted"},
         "items": {
             "type": "ARRAY",
             "items": {
@@ -1042,12 +1053,47 @@ Output: {
   "language_code": "gu-IN"
 }
 
+#### Case: User Requests Recommendation / What is Special
+Input: "recommendation aapo kaik"
+Output: {
+  "intent": "recommendation",
+  "items": [],
+  "modifications": [],
+  "response_text": "Pooja Restaurant ma amara pase Veg Loaded Pizza ane Mysore Masala Dosa bahu special che. Tame try karso?",
+  "language_code": "gu-IN"
+}
+
+#### Case: Sweet Recommendation
+Input: "sweet mein kya hai?"
+Output: {
+  "intent": "recommendation",
+  "items": [],
+  "modifications": [],
+  "response_text": "Sweet mein hamare paas Gulab Jamun aur Rabdi hai. Kya main ek Gulab Jamun add karu?",
+  "language_code": "hi-IN"
+}
+
+#### Case: General Recommendation Query
+Input: "what do you recommend?"
+Output: {
+  "intent": "recommendation",
+  "items": [],
+  "modifications": [],
+  "response_text": "I recommend our special Mysore Masala Dosa, Amritsari Chole Bhature, and Veg Loaded Pizza. Would you like to order any of these?",
+  "language_code": "en-IN"
+}
+
 ---
 
 ## 💡 RECOMMENDATION ENGINE
-Proactively suggest based on context. Keep it SHORT — one line max.
-- Suggest bread pairings with main course, or beverages/desserts at the end.
-- Suggest ONLY items from the menu above.
+1. **Proactive Suggestion**: Proactively suggest based on context. Keep it SHORT — one line max.
+   - Suggest bread pairings with main course, or beverages/desserts at the end.
+   - Suggest ONLY items from the menu above.
+2. **User-Requested Recommendations**: When a user explicitly asks for recommendations, suggestions, specials, or what is good (e.g., "what do you recommend?", "recommend me something sweet", "aaj kya achha hai?", "recomondation aapo kaik", "su saru malso?", "kuch sweet batao"):
+   - Set `"intent": "recommendation"`.
+   - In `"response_text"`, politely list 2-3 popular items from the menu that match the category or user query, and ask if they would like to try one of them.
+   - Keep the response short, friendly, and in the customer's language.
+   - Suggest ONLY items from the menu categories.
 
 ---
 
@@ -1066,9 +1112,10 @@ Proactively suggest based on context. Keep it SHORT — one line max.
 2. **NEVER repeat or parrot the user's words back as your response.** Always generate your OWN natural waiter response.
 3. **Complaints / Threats / Abuse**: If a user makes threats, complaints, or abusive remarks, respond CALMLY and POLITELY. Example: "Bhai, maaf karo. Main sirf order lene ke liye hoon. Agar koi problem hai toh manager se baat kar sakte ho. Abhi kya order karna hai?"
 4. **Non-menu food demands**: If a user demands food NOT on the menu (e.g., "give me non-veg", "I want pizza hut"), politely inform them what IS available. Example: "Maaf karjo bhai, amara menu ma non-veg nathi. Pan amara pase Paneer Tikka, Veg Biryani jeva tasty options che. Try karso?"
-5. **Off-topic requests** (politics, personal questions, jokes, etc.): Politely redirect. Example: "Haha bhai, main toh sirf khana serve karta hoon! Batao kya khana hai?"
-6. **NEVER add items to the order that are NOT in the menu**, even if the user insists or threatens.
-7. **NEVER generate responses longer than 3 sentences.** Keep it short, polite, and redirect to ordering.
+5. **Greetings** (hello, hi, hey, namaste, kem cho, kaise ho, good morning, etc.): ALWAYS greet back warmly. Set `"intent": "greeting"`. Reply in the user's language and naturally transition to ask about their order. Example (Hindi): "Namaste bhai! Kya khana pasand hai aaj?" Example (Gujarati): "Kem cho! Shu order karvu che?"
+6. **Off-topic requests** (politics, personal questions, jokes, etc.): Politely redirect. Example: "Haha bhai, main toh sirf khana serve karta hoon! Batao kya khana hai?"
+7. **NEVER add items to the order that are NOT in the menu**, even if the user insists or threatens.
+8. **NEVER generate responses longer than 3 sentences.** Keep it short, polite, and redirect to ordering.
 
 ## 🧾 RESPONSE FORMAT RULES
 1. MAX 2-3 short sentences per reply.
@@ -1119,29 +1166,31 @@ Proactively suggest based on context. Keep it SHORT — one line max.
         
         # ── LLM Extraction Call ──
         try:
-            # 1. Primary: OpenRouter (Gemma 4 31B)
+            # 1. Primary: OpenRouter (Gemini 2.5 Flash)
             client = get_openrouter_client()
             try:
                 completion = await client.chat.completions.create(
-                    model="google/gemma-4-31b-it:free",
+                    model="google/gemini-2.5-flash",
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": f"{hint_prompt}Current Order Summary: {current_order_summary}\n\nUser Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}"}
                     ],
                     response_format={"type": "json_object"},
-                    temperature=0.1
+                    temperature=0.1,
+                    max_tokens=400
                 )
             except Exception as e:
-                print(f"OpenRouter Gemma Error: {e}. Falling back to OpenRouter Gemini...")
-                # 2. Fallback 1: OpenRouter (Gemini 2.0 Flash)
+                print(f"OpenRouter Gemini 2.5 Flash Error: {e}. Falling back to OpenRouter Gemini 2.5 Flash Free...")
+                # 2. Fallback 1: OpenRouter (Gemini 2.5 Flash Free)
                 completion = await client.chat.completions.create(
-                    model="google/gemini-2.0-flash-001",
+                    model="google/gemini-2.5-flash:free",
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": f"{hint_prompt}Current Order Summary: {current_order_summary}\n\nUser Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}"}
                     ],
                     response_format={"type": "json_object"},
-                    temperature=0.1
+                    temperature=0.1,
+                    max_tokens=400
                 )
             
             text_content = completion.choices[0].message.content
@@ -1150,21 +1199,58 @@ Proactively suggest based on context. Keep it SHORT — one line max.
             total_llm_time = (time.perf_counter() - start_llm_time) * 1000
 
         except Exception as e:
-            print(f"OpenRouter Gemini/Global Error: {e}. Falling back to Cerebras...")
-            # 3. Fallback 2: Cerebras (Qwen 3 235B)
-            client = get_cerebras_client()
+            print(f"OpenRouter Error: {e}. Falling back to Groq...")
+            # 3. Fallback 2: Groq (Llama 3.3 70B)
+            client = get_groq_client()
             completion = await client.chat.completions.create(
-                model="qwen-3-235b-a22b-instruct-2507",
+                model="llama-3.3-70b-versatile",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"{hint_prompt}Current Order Summary: {current_order_summary}\n\nUser Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}"}
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.1
+                temperature=0.1,
+                max_tokens=400
             )
             text_content = completion.choices[0].message.content
             prompt_tokens = completion.usage.prompt_tokens
             completion_tokens = completion.usage.completion_tokens
+            total_llm_time = (time.perf_counter() - start_llm_time) * 1000
+
+        except Exception as e:
+            print(f"Groq Error: {e}. Falling back to Cerebras...")
+            # 4. Fallback 3: Cerebras (Llama 3.1 8B - fast, generous free tier)
+            client = get_cerebras_client()
+            completion = await client.chat.completions.create(
+                model="llama3.1-8b",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"{hint_prompt}Current Order Summary: {current_order_summary}\n\nUser Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}"}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.1,
+                max_tokens=400
+            )
+            text_content = completion.choices[0].message.content
+            prompt_tokens = completion.usage.prompt_tokens
+            completion_tokens = completion.usage.completion_tokens
+            total_llm_time = (time.perf_counter() - start_llm_time) * 1000
+
+        except Exception as e:
+            print(f"Cerebras Error: {e}. Falling back to Direct Gemini...")
+            # 5. Fallback 4: Direct Gemini API (gemini-1.5-flash - reliable free tier)
+            from google import genai
+            GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+            gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+            response = gemini_client.models.generate_content(
+                model="gemini-1.5-flash",
+                contents=f"{system_prompt}\n\n{hint_prompt}Current Order Summary: {current_order_summary}\n\nUser Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}",
+                config={"response_mime_type": "application/json", "temperature": 0.1, "max_output_tokens": 400}
+            )
+            text_content = response.text
+            # Gemini doesn't return usage in same format, estimate tokens
+            prompt_tokens = len(system_prompt) // 4 + len(transcript) // 4 + 100
+            completion_tokens = len(text_content) // 4
             total_llm_time = (time.perf_counter() - start_llm_time) * 1000
 
         print(f"DEBUG: [METRICS] Keyword Scanning: {hint_latency:.2f}ms | Added Tokens: ~{hint_tokens}")
