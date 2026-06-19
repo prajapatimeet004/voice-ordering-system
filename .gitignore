@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+api keys.txt
+
+# Audio / Temp
+*.wav
+*.mp3
+temp_audio/
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project specific
+*.zip
+node_modules/
+walkthrough.md
