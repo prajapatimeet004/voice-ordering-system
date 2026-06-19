@@ -43,6 +43,9 @@ services:
       - key: PYTHONUNBUFFERED
         value: "1"
 
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+
   - type: redis
     name: voice-redis
     plan: starter
