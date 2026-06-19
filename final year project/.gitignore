@@ -10,3 +10,7 @@ final_verify_*.py
 *.wav
 *.log
 walkthrough.md
+*.zip
+logs/
+api keys.txt
+node_modules/

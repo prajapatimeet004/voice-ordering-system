@@ -1164,95 +1164,83 @@ Output: {
         # Start Timing the LLM Call
         start_llm_time = time.perf_counter()
         
-        # ── LLM Extraction Call ──
-        try:
-            # 1. Primary: OpenRouter (Gemini 2.5 Flash)
-            client = get_openrouter_client()
+        # ── Provider Fallback Chain ──
+        # Each entry: (provider_name, client_getter, model, api_type, extra_kwargs)
+        # api_type: "openai_compat" for OpenAI-compatible, "gemini" for Google GenAI
+        providers = [
+            # OpenRouter models (primary)
+            ("OpenRouter:gemini-2.5-flash", get_openrouter_client, "google/gemini-2.5-flash", "openai_compat", {}),
+            ("OpenRouter:gemini-2.5-flash:free", get_openrouter_client, "google/gemini-2.5-flash:free", "openai_compat", {}),
+            ("OpenRouter:gemini-2.0-flash:free", get_openrouter_client, "google/gemini-2.0-flash:free", "openai_compat", {}),
+            ("OpenRouter:llama-3.3-70b-instruct:free", get_openrouter_client, "meta-llama/llama-3.3-70b-instruct:free", "openai_compat", {}),
+            ("OpenRouter:deepseek-r1:free", get_openrouter_client, "deepseek/deepseek-r1:free", "openai_compat", {}),
+            ("OpenRouter:mistral-small-24b:free", get_openrouter_client, "mistralai/mistral-small-24b-instruct-2501:free", "openai_compat", {}),
+            ("OpenRouter:qwen-2.5-7b:free", get_openrouter_client, "qwen/qwen-2.5-7b-instruct:free", "openai_compat", {}),
+            ("OpenRouter:phi-3-mini:free", get_openrouter_client, "microsoft/phi-3-mini-128k-instruct:free", "openai_compat", {}),
+            # Cerebras models (fast inference)
+            ("Cerebras:llama3.1-70b", get_cerebras_client, "llama3.1-70b", "openai_compat", {}),
+            ("Cerebras:gpt-oss-120b", get_cerebras_client, "gpt-oss-120b", "openai_compat", {}),
+            # Direct Gemini API (separate quota from OpenRouter)
+            ("Gemini:gemini-2.0-flash", None, "gemini-2.0-flash", "gemini", {}),
+            ("Gemini:gemini-2.0-flash-lite", None, "gemini-2.0-flash-lite", "gemini", {}),
+            ("Gemini:gemini-1.5-flash", None, "gemini-1.5-flash", "gemini", {}),
+            # Groq (last resort - rate limited)
+            ("Groq:llama-3.3-70b-versatile", get_groq_client, "llama-3.3-70b-versatile", "openai_compat", {}),
+        ]
+        
+        text_content = None
+        prompt_tokens = 0
+        completion_tokens = 0
+        last_error = None
+        
+        for provider_name, client_getter, model, api_type, extra_kwargs in providers:
             try:
-                completion = await client.chat.completions.create(
-                    model="google/gemini-2.5-flash",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"{hint_prompt}Current Order Summary: {current_order_summary}\n\nUser Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}"}
-                    ],
-                    response_format={"type": "json_object"},
-                    temperature=0.1,
-                    max_tokens=400
-                )
+                print(f"DEBUG: Trying {provider_name}...")
+                
+                if api_type == "openai_compat":
+                    client = client_getter()
+                    completion = await client.chat.completions.create(
+                        model=model,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": f"{hint_prompt}Current Order Summary: {current_order_summary}\n\nUser Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}"}
+                        ],
+                        response_format={"type": "json_object"},
+                        temperature=0.1,
+                        max_tokens=400,
+                        **extra_kwargs
+                    )
+                    text_content = completion.choices[0].message.content
+                    prompt_tokens = completion.usage.prompt_tokens
+                    completion_tokens = completion.usage.completion_tokens
+                    
+                elif api_type == "gemini":
+                    from google import genai
+                    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+                    gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+                    response = gemini_client.models.generate_content(
+                        model=model,
+                        contents=f"{system_prompt}\n\n{hint_prompt}Current Order Summary: {current_order_summary}\n\nUser Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}",
+                        config={"response_mime_type": "application/json", "temperature": 0.1, "max_output_tokens": 400}
+                    )
+                    text_content = response.text
+                    # Estimate tokens (Gemini doesn't return usage in same format)
+                    prompt_tokens = len(system_prompt) // 4 + len(transcript) // 4 + 100
+                    completion_tokens = len(text_content) // 4
+                
+                print(f"DEBUG: {provider_name} succeeded!")
+                break
+                
             except Exception as e:
-                print(f"OpenRouter Gemini 2.5 Flash Error: {e}. Falling back to OpenRouter Gemini 2.5 Flash Free...")
-                # 2. Fallback 1: OpenRouter (Gemini 2.5 Flash Free)
-                completion = await client.chat.completions.create(
-                    model="google/gemini-2.5-flash:free",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"{hint_prompt}Current Order Summary: {current_order_summary}\n\nUser Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}"}
-                    ],
-                    response_format={"type": "json_object"},
-                    temperature=0.1,
-                    max_tokens=400
-                )
-            
-            text_content = completion.choices[0].message.content
-            prompt_tokens = completion.usage.prompt_tokens
-            completion_tokens = completion.usage.completion_tokens
-            total_llm_time = (time.perf_counter() - start_llm_time) * 1000
-
-        except Exception as e:
-            print(f"OpenRouter Error: {e}. Falling back to Groq...")
-            # 3. Fallback 2: Groq (Llama 3.3 70B)
-            client = get_groq_client()
-            completion = await client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"{hint_prompt}Current Order Summary: {current_order_summary}\n\nUser Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}"}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.1,
-                max_tokens=400
-            )
-            text_content = completion.choices[0].message.content
-            prompt_tokens = completion.usage.prompt_tokens
-            completion_tokens = completion.usage.completion_tokens
-            total_llm_time = (time.perf_counter() - start_llm_time) * 1000
-
-        except Exception as e:
-            print(f"Groq Error: {e}. Falling back to Cerebras...")
-            # 4. Fallback 3: Cerebras (Llama 3.1 8B - fast, generous free tier)
-            client = get_cerebras_client()
-            completion = await client.chat.completions.create(
-                model="llama3.1-8b",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"{hint_prompt}Current Order Summary: {current_order_summary}\n\nUser Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}"}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.1,
-                max_tokens=400
-            )
-            text_content = completion.choices[0].message.content
-            prompt_tokens = completion.usage.prompt_tokens
-            completion_tokens = completion.usage.completion_tokens
-            total_llm_time = (time.perf_counter() - start_llm_time) * 1000
-
-        except Exception as e:
-            print(f"Cerebras Error: {e}. Falling back to Direct Gemini...")
-            # 5. Fallback 4: Direct Gemini API (gemini-1.5-flash - reliable free tier)
-            from google import genai
-            GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-            gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-            response = gemini_client.models.generate_content(
-                model="gemini-1.5-flash",
-                contents=f"{system_prompt}\n\n{hint_prompt}Current Order Summary: {current_order_summary}\n\nUser Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}",
-                config={"response_mime_type": "application/json", "temperature": 0.1, "max_output_tokens": 400}
-            )
-            text_content = response.text
-            # Gemini doesn't return usage in same format, estimate tokens
-            prompt_tokens = len(system_prompt) // 4 + len(transcript) // 4 + 100
-            completion_tokens = len(text_content) // 4
-            total_llm_time = (time.perf_counter() - start_llm_time) * 1000
-
+                last_error = e
+                print(f"DEBUG: {provider_name} failed: {e}")
+                continue
+        
+        if text_content is None:
+            raise Exception(f"All LLM providers failed. Last error: {last_error}")
+        
+        total_llm_time = (time.perf_counter() - start_llm_time) * 1000
+        
         print(f"DEBUG: [METRICS] Keyword Scanning: {hint_latency:.2f}ms | Added Tokens: ~{hint_tokens}")
         print(f"DEBUG: [METRICS] LLM Extraction: {total_llm_time:.2f}ms")
 
@@ -1268,8 +1256,6 @@ Output: {
         cleaned_json = extract_json(text_content)
         parsed_data = json.loads(cleaned_json)
 
-
-        
         # Process all extracted data
         extracted_items = parsed_data.get("items", [])
         extracted_modifications = parsed_data.get("modifications", [])
