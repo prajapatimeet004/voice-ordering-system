@@ -4,27 +4,50 @@ services:
     runtime: python
     region: oregon
     plan: starter
+
     buildCommand: |
       cd "final year project" && pip install --upgrade pip && pip install -r requirements.txt
-    startCommand: cd "final year project" && uvicorn server:app --host 0.0.0.0 --port $PORT --workers 2
+
+    startCommand: |
+      cd "final year project" && uvicorn server:app --host 0.0.0.0 --port $PORT --workers 2
+
     healthCheckPath: /health
+
     envVars:
       - key: DATABASE_URL
-        fromDatabase: voice-db
+        fromDatabase:
+          name: voice-db
+          property: connectionString
+
       - key: REDIS_URL
-        fromDatabase: voice-redis
+        fromService:
+          type: redis
+          name: voice-redis
+          property: connectionString
+
       - key: SARVAM_API_KEY
         sync: false
+
       - key: GROQ_API_KEY
         sync: false
+
       - key: GEMINI_API_KEY
         sync: false
+
       - key: OPENROUTER_API_KEY
         sync: false
+
       - key: CEREBRAS_API_KEY
         sync: false
+
       - key: PYTHONUNBUFFERED
         value: "1"
+
+  - type: redis
+    name: voice-redis
+    plan: starter
+    region: oregon
+    maxmemoryPolicy: allkeys-lru
 
 databases:
   - name: voice-db
@@ -32,10 +55,4 @@ databases:
     user: voice_user
     plan: starter
     region: oregon
-    postgresMajorVersion: 16
-
-  - name: voice-redis
-    type: redis
-    plan: starter
-    region: oregon
-    maxmemoryPolicy: allkeys-lru
+    postgresMajorVersion: 18
