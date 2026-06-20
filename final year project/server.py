@@ -254,7 +254,8 @@ async def lifespan(application: FastAPI):
 
     # Shutdown
     print("INFO: Shutting down...")
-    await close_db()
+    if _HAS_DB:
+        await close_db()
     if _HAS_REDIS:
         await close_redis()
 
