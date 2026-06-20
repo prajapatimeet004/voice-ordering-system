@@ -821,7 +821,6 @@
 
         // ─── VAD Runtime State ──────────────────────────────────────────
         let vadActive = false; // VAD toggle (mic btn tap)
-        let isInitializingMic = false; // Guard for overlapping microphone initialization
         let isProcessing = false; // locked while API is in-flight or TTS playing
         let isSpeaking = false; // currently recording a speech chunk
         let silenceTimer = null;
@@ -942,24 +941,15 @@
 
         // ─── VAD Core ─────────────────────────────────────────────────────
         async function initVAD() {
-            if (vadActive || isInitializingMic) return;
-            isInitializingMic = true;
-            console.log("[Mic] Requesting microphone access...");
+            if (vadActive) return;
             try {
+                console.log("[VAD] Requesting microphone access...");
                 const constraints = {
                     audio: selectedMicId === 'default' ? true : { deviceId: { exact: selectedMicId } },
                     video: false
                 };
                 micStream = await navigator.mediaDevices.getUserMedia(constraints);
-                console.log("[Mic] Microphone access granted successfully. Stream:", micStream);
-
-                // Guard check: if stopVAD() was called while we were waiting for user permission
-                if (!isInitializingMic) {
-                    console.warn("[Mic] Mic initialized but VAD setup was aborted. Stopping tracks.");
-                    if (micStream) micStream.getTracks().forEach(t => t.stop());
-                    micStream = null;
-                    return;
-                }
+                console.log("[VAD] Microphone acquired, stream active:", micStream.active);
 
                 audioCtx = new(window.AudioContext || window.webkitAudioContext)();
                 analyser = audioCtx.createAnalyser();
@@ -972,74 +962,47 @@
                 monitorVolume();
 
             } catch (err) {
-                console.error("[Mic] Microphone access denied or initialization failed:", err);
+                console.error("[VAD] Microphone access denied:", err.message);
                 alert("Microphone access denied. VAD requires mic permission.");
-                stopVAD();
-            } finally {
-                isInitializingMic = false;
+                vadActive = false;
             }
         }
 
         function stopVAD() {
-            console.log("[VAD] Stopping VAD and cleaning up all resources...");
+            console.log("[VAD] stopVAD called");
             vadActive = false;
-            isInitializingMic = false;
-
-            if (animFrameId) { 
-                cancelAnimationFrame(animFrameId);
-                animFrameId = null; 
-            }
-            if (silenceTimer) { 
-                clearTimeout(silenceTimer);
-                silenceTimer = null; 
-            }
-            
+            if (animFrameId) { cancelAnimationFrame(animFrameId);
+                animFrameId = null; }
+            if (silenceTimer) { clearTimeout(silenceTimer);
+                silenceTimer = null; }
             if (mediaRecorder && mediaRecorder.state === 'recording') {
-                try {
-                    mediaRecorder.stop();
-                } catch (e) {
-                    console.warn("[VAD] Error stopping mediaRecorder:", e);
-                }
+                console.log("[VAD] Stopping active MediaRecorder during stopVAD");
+                mediaRecorder.stop();
             }
-            mediaRecorder = null;
-
+            if (micStream) {
+                micStream.getTracks().forEach(t => t.stop());
+                console.log("[VAD] Microphone tracks stopped");
+            }
+            if (audioCtx) audioCtx.close();
             if (audioWs) {
-                console.log("[WS] Closing WebSocket connection...");
                 try {
                     audioWs.onopen = null;
                     audioWs.onmessage = null;
                     audioWs.onerror = null;
                     audioWs.onclose = null;
                     audioWs.close();
-                } catch (e) {
-                    console.warn("[WS] Error closing WebSocket:", e);
-                }
+                } catch (e) {}
                 audioWs = null;
             }
-
-            if (micStream) {
-                console.log("[Mic] Stopping all microphone tracks.");
-                micStream.getTracks().forEach(t => t.stop());
-            }
             micStream = null;
-
-            if (audioCtx) {
-                console.log("[AudioCtx] Closing AudioContext.");
-                try {
-                    audioCtx.close();
-                } catch (e) {
-                    console.warn("[AudioCtx] Error closing AudioContext:", e);
-                }
-            }
             audioCtx = null;
             analyser = null;
-            
+            mediaRecorder = null;
             isSpeaking = false;
             isProcessing = false;
             document.getElementById('order-screen').classList.remove('recording');
             micBtn.classList.remove('vad-on');
             setVADStatus('off');
-            console.log("[VAD] Stopped successfully.");
         }
 
         function monitorVolume() {
@@ -1054,10 +1017,8 @@
                 const rms = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
 
                 if (rms > SPEECH_THRESHOLD) {
-                    if (silenceTimer) { 
-                        clearTimeout(silenceTimer);
-                        silenceTimer = null; 
-                    }
+                    if (silenceTimer) { clearTimeout(silenceTimer);
+                        silenceTimer = null; }
                     if (!isSpeaking && !isProcessing) {
                         onSpeechStart();
                     }
@@ -1070,158 +1031,160 @@
             tick();
         }
 
+        function cleanupAudioWs(ws) {
+            if (!ws) return;
+            try {
+                ws.onopen = null;
+                ws.onmessage = null;
+                ws.onerror = null;
+                ws.onclose = null;
+                ws.close();
+            } catch (e) {}
+        }
+
         function onSpeechStart() {
-            console.log("[VAD] Speech start detected.");
-            
-            // Validate micStream exists and is valid
-            if (!micStream) {
-                console.error("[VAD] Cannot start speech recording: micStream is null.");
-                stopVAD();
-                return;
-            }
-            if (!(micStream instanceof MediaStream)) {
-                console.error("[VAD] Cannot start speech recording: micStream is not an instance of MediaStream.");
-                stopVAD();
-                return;
-            }
-            const audioTracks = micStream.getAudioTracks();
-            if (audioTracks.length === 0 || audioTracks[0].readyState !== 'live') {
-                console.error("[VAD] Cannot start speech recording: micStream has no active live audio tracks.");
-                stopVAD();
+            // Guard: validate micStream before proceeding
+            if (!micStream || !(micStream instanceof MediaStream) || micStream.active === false) {
+                console.error("[VAD] onSpeechStart: invalid micStream", micStream);
+                isSpeaking = false;
                 return;
             }
 
             isSpeaking = true;
+            console.log("[VAD] onSpeechStart: speech detected, starting recording flow");
 
-            // Close existing socket if any (open or connecting) and reset its callbacks
+            // Close any existing WebSocket
             if (audioWs) {
-                console.log("[WS] Cleaning up previous WebSocket before opening a new one...");
-                try {
-                    audioWs.onopen = null;
-                    audioWs.onmessage = null;
-                    audioWs.onerror = null;
-                    audioWs.onclose = null;
-                    audioWs.close();
-                } catch (e) {
-                    console.warn("[WS] Error closing previous WebSocket:", e);
-                }
+                cleanupAudioWs(audioWs);
                 audioWs = null;
+            }
+
+            // Create MediaRecorder synchronously BEFORE WebSocket to avoid race.
+            // Buffer chunks in-flight; they will be sent once WS opens.
+            try {
+                console.log("[MR] Creating MediaRecorder with stream, active:", micStream.active);
+                mediaRecorder = new MediaRecorder(micStream);
+            } catch (err) {
+                console.error("[MR] Failed to create MediaRecorder:", err);
+                isSpeaking = false;
+                return;
+            }
+
+            let pendingChunks = [];
+            let recorderActive = false;
+
+            mediaRecorder.ondataavailable = e => {
+                if (e.data.size > 0) {
+                    if (audioWs && audioWs.readyState === WebSocket.OPEN) {
+                        console.log("[Audio] Sending chunk:", e.data.size, "bytes");
+                        audioWs.send(e.data);
+                    } else {
+                        pendingChunks.push(e.data);
+                    }
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                console.log("[MR] MediaRecorder stopped");
+                recorderActive = false;
+                if (audioWs && audioWs.readyState === WebSocket.OPEN) {
+                    console.log("[WS] Sending stop signal to server");
+                    audioWs.send(JSON.stringify({ action: "stop" }));
+                } else if (audioWs && audioWs.readyState === WebSocket.CONNECTING) {
+                    console.log("[WS] WS still connecting, will send stop once open");
+                    audioWs.addEventListener('open', () => {
+                        try {
+                            audioWs.send(JSON.stringify({ action: "stop" }));
+                        } catch (e) {
+                            console.warn("[WS] Failed to send stop on late open:", e);
+                        }
+                    }, { once: true });
+                } else {
+                    console.warn("[WS] No open WS on recorder stop, unlocking VAD");
+                    isProcessing = false;
+                    isSpeaking = false;
+                    setVADStatus('active');
+                }
+            };
+
+            // Start recorder with 100ms timeslices
+            try {
+                mediaRecorder.start(100);
+                recorderActive = true;
+                console.log("[MR] MediaRecorder started (timeslice=100ms)");
+            } catch (err) {
+                console.error("[MR] Failed to start MediaRecorder:", err);
+                mediaRecorder = null;
+                isSpeaking = false;
+                return;
             }
 
             // Open WebSocket Connection
             let wsUrl = API_URL.replace("http", "ws");
             if (wsUrl === "file://") { wsUrl = "ws://127.0.0.1:8000"; }
 
-            console.log(`[WS] Connecting to: ${wsUrl}/order/stream_audio`);
+            console.log("[WS] Connecting to", `${wsUrl}/order/stream_audio`);
             const ws = new WebSocket(`${wsUrl}/order/stream_audio`);
             audioWs = ws;
 
-            ws.onopen = () => {
-                // Verify this socket is still the active one
-                if (audioWs !== ws) {
-                    console.warn("[WS] onopen fired for an outdated WebSocket instance. Closing.");
-                    ws.close();
-                    return;
-                }
-
-                console.log("[WS] Connection opened successfully. Sending action: 'start'...");
-                try {
-                    ws.send(JSON.stringify({ action: "start", table_id: currentTableId }));
-                } catch (sendErr) {
-                    console.error("[WS] Failed to send start message:", sendErr);
-                    handleWSErrorOrDisconnect(ws);
-                    return;
-                }
-
-                // Initialize and start MediaRecorder
-                console.log("[MediaRecorder] Creating MediaRecorder with micStream...");
-                try {
-                    // Double check stream validity again right before creation to prevent race conditions
-                    if (!micStream || !(micStream instanceof MediaStream)) {
-                        throw new Error("micStream is not a valid MediaStream object at MediaRecorder creation time.");
-                    }
-
-                    mediaRecorder = new MediaRecorder(micStream);
-                    console.log("[MediaRecorder] Created successfully. Starting recording...");
-
-                    mediaRecorder.ondataavailable = e => {
-                        if (e.data && e.data.size > 0) {
-                            if (ws.readyState === WebSocket.OPEN) {
-                                console.log(`[MediaRecorder] Sending audio chunk to server (${e.data.size} bytes).`);
-                                ws.send(e.data); // Stream directly
-                            } else {
-                                console.warn("[MediaRecorder] Data available but WebSocket is not OPEN. Current state:", ws.readyState);
-                            }
-                        }
-                    };
-
-                    mediaRecorder.onstop = () => {
-                        console.log("[MediaRecorder] Stopped recording.");
-                        if (ws.readyState === WebSocket.OPEN) {
-                            console.log("[WS] Sending stop signal to server...");
-                            try {
-                                ws.send(JSON.stringify({ action: "stop" }));
-                            } catch (stopErr) {
-                                console.error("[WS] Failed to send stop signal:", stopErr);
-                                handleWSErrorOrDisconnect(ws);
-                            }
-                        } else {
-                            console.warn("[WS] WebSocket is not open during onstop. Unlocking VAD.");
-                            isProcessing = false;
-                            isSpeaking = false;
-                            setVADStatus('active');
-                        }
-                    };
-
-                    mediaRecorder.start(100);
-                    console.log("[MediaRecorder] Recording started with timeslice of 100ms.");
-
-                } catch (recErr) {
-                    console.error("[MediaRecorder] Failed to initialize/start MediaRecorder:", recErr);
-                    alert("Failed to initialize audio recorder. Please reload the page.");
-                    stopVAD();
-                }
-            };
-
             // Safety timeout: if server never responds within 60s, unlock VAD
             let wsResponseTimeout = setTimeout(() => {
-                console.warn("[WS] Response timeout (60s) reached without server response — unlocking VAD.");
+                console.warn("[WS] Response timeout (60s) — unlocking VAD.");
                 isProcessing = false;
                 isSpeaking = false;
+                mediaRecorder = null;
                 setVADStatus('active');
                 transcriptEl.innerText = "Timeout. Try again.";
             }, 60000);
 
-            // Track pending result for TTS audio message
+            function clearWsTimeout() {
+                if (wsResponseTimeout) {
+                    clearTimeout(wsResponseTimeout);
+                    wsResponseTimeout = null;
+                }
+            }
+
+            ws.onopen = () => {
+                if (audioWs !== ws) {
+                    console.log("[WS] Stale onopen ignored");
+                    return;
+                }
+                console.log("[WS] Connection opened");
+
+                // Send start signal
+                ws.send(JSON.stringify({ action: "start", table_id: currentTableId }));
+
+                // Flush any chunks that were buffered before WS opened
+                if (pendingChunks.length > 0) {
+                    console.log("[Audio] Flushing", pendingChunks.length, "buffered chunks");
+                    for (const chunk of pendingChunks) {
+                        if (ws.readyState === WebSocket.OPEN) {
+                            ws.send(chunk);
+                        }
+                    }
+                    pendingChunks = [];
+                }
+            };
+
             let pendingResult = null;
 
             ws.onmessage = (e) => {
-                // Verify this socket is still the active one
                 if (audioWs !== ws) return;
 
                 let cResult;
-                try { 
-                    cResult = JSON.parse(e.data); 
-                } catch (parseErr) { 
-                    console.error("[WS] Failed to parse message from server:", parseErr);
-                    return; 
-                }
+                try { cResult = JSON.parse(e.data); } catch { return; }
 
-                console.log("[WS] Received message from server:", cResult);
-
-                // Helper to unlock VAD
-                const unlockVAD = () => { 
+                const unlockVAD = () => {
                     isProcessing = false;
                     isSpeaking = false;
-                    setVADStatus('active'); 
+                    setVADStatus('active');
                 };
 
                 // Message 2: TTS audio arrived separately
                 if (cResult.type === "tts_audio" && cResult.speech) {
-                    console.log("[TTS] Audio received. Playing...");
+                    console.log("[TTS] Playing audio response");
                     const audio = new Audio(`data:audio/mp3;base64,${cResult.speech}`);
                     const onAudioDone = () => {
-                        console.log("[TTS] Audio playback finished.");
                         if (pendingResult && pendingResult.is_finished) {
                             setTimeout(() => {
                                 alert("Order submitted successfully!");
@@ -1230,24 +1193,17 @@
                         }
                     };
                     audio.onended = onAudioDone;
-                    audio.onerror = (audioErr) => {
-                        console.error("[TTS] Audio playback error:", audioErr);
-                        onAudioDone();
-                    };
-                    audio.play().catch(playErr => {
-                        console.error("[TTS] Audio play failed (autoplay block?):", playErr);
-                        onAudioDone();
-                    });
+                    audio.onerror = onAudioDone;
+                    audio.play().catch(onAudioDone);
                     return;
                 }
 
-                // Message 1: Text result — show immediately
-                clearTimeout(wsResponseTimeout);
+                // Message 1: Text result
+                clearWsTimeout();
                 pendingResult = cResult;
 
                 if (cResult.error) {
                     const errMsg = cResult.error;
-                    console.error("[Server Process Error]:", errMsg);
                     if (errMsg.includes('No audio') || errMsg.includes('No speech')) {
                         transcriptEl.innerText = "No speech detected. Please try again.";
                         replyEl.innerText = "Didn't catch that, try again.";
@@ -1262,10 +1218,8 @@
                 if (cResult.transcript) transcriptEl.innerText = `"${cResult.transcript}"`;
                 replyEl.innerText = cResult.response_text || "Order updated!";
 
-                // Unlock VAD immediately — audio will play when it arrives
                 unlockVAD();
 
-                // If no TTS will come (e.g. finished without speech), handle finish
                 if (cResult.is_finished && !cResult.response_text) {
                     setTimeout(() => {
                         alert("Order submitted successfully!");
@@ -1276,14 +1230,36 @@
 
             ws.onerror = (err) => {
                 if (audioWs !== ws) return;
-                console.error("[WS] WebSocket error observed:", err);
-                handleWSErrorOrDisconnect(ws);
+                console.error("[WS] Error:", err);
+                clearWsTimeout();
+                // Stop recorder if active
+                if (mediaRecorder && mediaRecorder.state === 'recording') {
+                    try { mediaRecorder.stop(); } catch (e) {}
+                }
+                isProcessing = false;
+                isSpeaking = false;
+                mediaRecorder = null;
+                setVADStatus('active');
+                transcriptEl.innerText = "Connection error. Tap mic to retry.";
+                replyEl.innerText = "Network issue. Please try again.";
             };
 
             ws.onclose = (event) => {
                 if (audioWs !== ws) return;
-                console.warn(`[WS] WebSocket connection closed. Code: ${event.code}, Reason: ${event.reason}`);
-                handleWSErrorOrDisconnect(ws);
+                console.log("[WS] Closed (code=" + event.code + ", reason=" + event.reason + ")");
+                clearWsTimeout();
+                audioWs = null;
+                // Stop recorder if still active
+                if (mediaRecorder && mediaRecorder.state === 'recording') {
+                    try { mediaRecorder.stop(); } catch (e) {}
+                    mediaRecorder = null;
+                }
+                // Only unlock if we were waiting for a response
+                if (isProcessing || isSpeaking) {
+                    isProcessing = false;
+                    isSpeaking = false;
+                    setVADStatus('active');
+                }
             };
 
             document.getElementById('order-screen').classList.add('recording');
@@ -1292,55 +1268,32 @@
             replyEl.innerText = "I'm listening...";
         }
 
-        function handleWSErrorOrDisconnect(ws) {
-            if (audioWs === ws) {
-                console.warn("[WS] Active WebSocket disconnected or failed. Resetting VAD state.");
-                isProcessing = false;
-                isSpeaking = false;
-                setVADStatus('active');
-                transcriptEl.innerText = "Connection lost. Please try speaking again.";
-                
-                if (mediaRecorder && mediaRecorder.state === 'recording') {
-                    try {
-                        mediaRecorder.stop();
-                    } catch (e) {}
-                }
-                mediaRecorder = null;
-                
-                if (audioWs) {
-                    try {
-                        audioWs.onopen = null;
-                        audioWs.onmessage = null;
-                        audioWs.onerror = null;
-                        audioWs.onclose = null;
-                        audioWs.close();
-                    } catch (e) {}
-                    audioWs = null;
-                }
-            }
-        }
-
         function onSpeechEnd() {
             if (!isSpeaking) return;
-            console.log("[VAD] Speech end detected (silence duration reached).");
             isSpeaking = false;
             isProcessing = true;
             silenceTimer = null;
+            console.log("[VAD] onSpeechEnd: silence detected, stopping recording");
 
             if (mediaRecorder && mediaRecorder.state === 'recording') {
-                console.log("[VAD] Stopping MediaRecorder to trigger processing...");
                 try { mediaRecorder.requestData(); } catch (e) {}
+                console.log("[MR] Stopping MediaRecorder");
                 mediaRecorder.stop();
+                mediaRecorder = null;
             } else if (audioWs && audioWs.readyState === WebSocket.OPEN) {
-                console.log("[VAD] MediaRecorder not active but WebSocket is open. Sending stop signal directly.");
-                try {
-                    audioWs.send(JSON.stringify({ action: "stop" }));
-                } catch (e) {
-                    console.error("[VAD] Failed to send stop signal onSpeechEnd:", e);
-                    handleWSErrorOrDisconnect(audioWs);
-                }
+                console.log("[WS] No active recorder, sending stop directly");
+                audioWs.send(JSON.stringify({ action: "stop" }));
+            } else if (audioWs && audioWs.readyState === WebSocket.CONNECTING) {
+                console.log("[WS] WS still connecting, will send stop once open");
+                audioWs.addEventListener('open', () => {
+                    try {
+                        audioWs.send(JSON.stringify({ action: "stop" }));
+                    } catch (e) {
+                        console.warn("[WS] Failed to send stop on late open:", e);
+                    }
+                }, { once: true });
             } else {
-                console.warn("[VAD] onSpeechEnd: no recorder or active WS connection. Unlocking VAD.");
+                console.warn("[VAD] onSpeechEnd: no recorder or WS, unlocking VAD");
                 isProcessing = false;
                 isSpeaking = false;
                 setVADStatus('active');
@@ -1404,12 +1357,14 @@
         // ─── Mic Button = VAD Toggle ──────────────────────────────────────
         micBtn.onclick = async () => {
             if (!vadActive) {
+                console.log("[UI] Mic button clicked, starting VAD");
                 await initVAD();
                 if (vadActive) {
                     micBtn.classList.add('vad-on');
                     transcriptEl.innerText = "Say something...";
                 }
             } else {
+                console.log("[UI] Mic button clicked, stopping VAD");
                 stopVAD();
                 transcriptEl.innerText = "Tap mic to restart.";
                 replyEl.innerText = "Microphone off.";

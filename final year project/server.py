@@ -974,10 +974,20 @@ async def toggle_availability(dish_name: str = Form(...), available: bool = Form
 async def ws_stream_audio(websocket: WebSocket, table_id: str = "default"):
     await websocket.accept()
     audio_chunks = []
+    WS_IDLE_TIMEOUT = 120  # seconds — Render proxy idle timeout is ~60s, use 120
 
     try:
         while True:
-            message = await websocket.receive()
+            try:
+                message = await asyncio.wait_for(websocket.receive(), timeout=WS_IDLE_TIMEOUT)
+            except asyncio.TimeoutError:
+                # Send a ping-equivalent (JSON keepalive) to keep proxy alive
+                try:
+                    await websocket.send_json({"type": "keepalive"})
+                except (WebSocketDisconnect, RuntimeError):
+                    break
+                continue
+
             if message.get("type") == "websocket.disconnect":
                 logging.debug("WS Client disconnected.")
                 print("WS Client disconnected.")
@@ -985,8 +995,6 @@ async def ws_stream_audio(websocket: WebSocket, table_id: str = "default"):
 
             if message.get("text") is not None:
                 try:
-                    logging.debug("Received WS TEXT: " + str(message["text"]))
-                    print("Received WS TEXT:", message["text"])
                     data = json.loads(message["text"])
                     if data.get("action") == "start":
                         audio_chunks = []
@@ -997,7 +1005,7 @@ async def ws_stream_audio(websocket: WebSocket, table_id: str = "default"):
                             print(f"DEBUG: Received audio is too short or empty ({total_bytes} bytes). Skipping transcription.")
                             try:
                                 await websocket.send_json({"error": "No speech detected.", "transcript": ""})
-                            except:
+                            except (WebSocketDisconnect, RuntimeError):
                                 break
                             audio_chunks = []
                             continue
@@ -1046,12 +1054,12 @@ async def ws_stream_audio(websocket: WebSocket, table_id: str = "default"):
                                     else:
                                         try:
                                             await websocket.send_json({"error": "Classification failed.", "transcript": transcript})
-                                        except:
+                                        except (WebSocketDisconnect, RuntimeError):
                                             break
                                 else:
                                     try:
                                         await websocket.send_json({"error": "No speech detected.", "transcript": ""})
-                                    except:
+                                    except (WebSocketDisconnect, RuntimeError):
                                         break
                             except Exception as e:
                                 logging.error(f"Processing error in WS: {e}")
@@ -1064,7 +1072,7 @@ async def ws_stream_audio(websocket: WebSocket, table_id: str = "default"):
                                         "transcript": "",
                                         "error": str(e)
                                     })
-                                except:
+                                except (WebSocketDisconnect, RuntimeError):
                                     logging.warning("Could not send error response: Client likely disconnected.")
                                     break
                             finally:
@@ -1074,17 +1082,20 @@ async def ws_stream_audio(websocket: WebSocket, table_id: str = "default"):
                         else:
                             try:
                                 await websocket.send_json({"error": "No audio chunks received"})
-                            except:
+                            except (WebSocketDisconnect, RuntimeError):
                                 break
+                except json.JSONDecodeError:
+                    logging.warning("WS received malformed JSON text")
+                    continue
                 except Exception as e:
                     logging.error(f"WS text error: {e}")
                     print(f"WS text error: {e}")
             elif message.get("bytes") is not None:
-                logging.debug(f"Received WS BYTES size: {len(message['bytes'])}")
-                print(f"Received WS BYTES size: {len(message['bytes'])}")
                 audio_chunks.append(message["bytes"])
     except WebSocketDisconnect:
         pass
+    except Exception as e:
+        logging.error(f"WS unexpected error: {e}")
 
 
 if __name__ == "__main__":

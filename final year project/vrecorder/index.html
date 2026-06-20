@@ -154,7 +154,9 @@
 
         function stopRecording() {
             if (!isRecording) return;
-            mediaRecorder.stop();
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
             isRecording = false;
             btn.className = 'mic-btn';
             statusLabel.innerText = "Processing...";
