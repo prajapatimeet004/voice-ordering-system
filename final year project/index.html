@@ -816,7 +816,7 @@
         let currentTableId = null;
 
         // ─── VAD Configuration ──────────────────────────────────────────
-        const SPEECH_THRESHOLD = 15; // RMS volume (0-255) to count as speech
+        const SPEECH_THRESHOLD = 25; // RMS volume (0-255) to count as speech
         const SILENCE_DURATION = 1500; // ms of silence before auto-sending
 
         // ─── VAD Runtime State ──────────────────────────────────────────
@@ -975,15 +975,7 @@
                 animFrameId = null; }
             if (silenceTimer) { clearTimeout(silenceTimer);
                 silenceTimer = null; }
-            if (mediaRecorder && mediaRecorder.state === 'recording') {
-                console.log("[VAD] Stopping active MediaRecorder during stopVAD");
-                mediaRecorder.stop();
-            }
-            if (micStream) {
-                micStream.getTracks().forEach(t => t.stop());
-                console.log("[VAD] Microphone tracks stopped");
-            }
-            if (audioCtx) audioCtx.close();
+            // Close WebSocket FIRST so onstop handler won't find a stale open WS
             if (audioWs) {
                 try {
                     audioWs.onopen = null;
@@ -994,6 +986,16 @@
                 } catch (e) {}
                 audioWs = null;
             }
+            // THEN stop recorder — onstop will see audioWs=null and unlock VAD
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                console.log("[VAD] Stopping active MediaRecorder during stopVAD");
+                mediaRecorder.stop();
+            }
+            if (micStream) {
+                micStream.getTracks().forEach(t => t.stop());
+                console.log("[VAD] Microphone tracks stopped");
+            }
+            if (audioCtx) audioCtx.close();
             micStream = null;
             audioCtx = null;
             analyser = null;
@@ -1127,20 +1129,37 @@
             const ws = new WebSocket(`${wsUrl}/order/stream_audio`);
             audioWs = ws;
 
-            // Safety timeout: if server never responds within 60s, unlock VAD
+            // Max recording duration: force-stop after 30s even if VAD doesn't detect silence
+            let maxRecordingTimeout = setTimeout(() => {
+                if (isSpeaking && mediaRecorder && mediaRecorder.state === 'recording') {
+                    console.warn("[VAD] Max recording duration (30s) reached, forcing stop");
+                    mediaRecorder.stop();
+                }
+            }, 30000);
+
+            // Safety timeout: if server never responds within 60s, force-stop recorder
             let wsResponseTimeout = setTimeout(() => {
-                console.warn("[WS] Response timeout (60s) — unlocking VAD.");
-                isProcessing = false;
-                isSpeaking = false;
-                mediaRecorder = null;
-                setVADStatus('active');
-                transcriptEl.innerText = "Timeout. Try again.";
+                console.warn("[WS] Response timeout (60s) — forcing stop.");
+                if (mediaRecorder && mediaRecorder.state === 'recording') {
+                    mediaRecorder.stop();  // triggers onstop → sends stop via WS
+                } else {
+                    // Recorder already stopped but no response — unlock manually
+                    isProcessing = false;
+                    isSpeaking = false;
+                    mediaRecorder = null;
+                    setVADStatus('active');
+                    transcriptEl.innerText = "Timeout. Try again.";
+                }
             }, 60000);
 
-            function clearWsTimeout() {
+            function clearTimeouts() {
                 if (wsResponseTimeout) {
                     clearTimeout(wsResponseTimeout);
                     wsResponseTimeout = null;
+                }
+                if (maxRecordingTimeout) {
+                    clearTimeout(maxRecordingTimeout);
+                    maxRecordingTimeout = null;
                 }
             }
 
@@ -1199,7 +1218,7 @@
                 }
 
                 // Message 1: Text result
-                clearWsTimeout();
+                clearTimeouts();
                 pendingResult = cResult;
 
                 if (cResult.error) {
@@ -1231,7 +1250,7 @@
             ws.onerror = (err) => {
                 if (audioWs !== ws) return;
                 console.error("[WS] Error:", err);
-                clearWsTimeout();
+                clearTimeouts();
                 // Stop recorder if active
                 if (mediaRecorder && mediaRecorder.state === 'recording') {
                     try { mediaRecorder.stop(); } catch (e) {}
@@ -1247,7 +1266,7 @@
             ws.onclose = (event) => {
                 if (audioWs !== ws) return;
                 console.log("[WS] Closed (code=" + event.code + ", reason=" + event.reason + ")");
-                clearWsTimeout();
+                clearTimeouts();
                 audioWs = null;
                 // Stop recorder if still active
                 if (mediaRecorder && mediaRecorder.state === 'recording') {

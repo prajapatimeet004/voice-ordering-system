@@ -5,6 +5,7 @@ import os
 import shutil
 import tempfile
 import asyncio
+import time
 import base64
 from contextlib import asynccontextmanager
 from typing import List, Optional, Dict, Any
@@ -975,12 +976,105 @@ async def ws_stream_audio(websocket: WebSocket, table_id: str = "default"):
     await websocket.accept()
     audio_chunks = []
     WS_IDLE_TIMEOUT = 120  # seconds — Render proxy idle timeout is ~60s, use 120
+    MAX_RECORDING_DURATION = 45  # seconds — auto-process if no stop after this
+    first_byte_time = None
+
+    async def process_accumulated_audio():
+        nonlocal audio_chunks, first_byte_time
+        total_bytes = sum(len(chunk) for chunk in audio_chunks)
+        if total_bytes < 3000:
+            print(f"DEBUG: Received audio is too short or empty ({total_bytes} bytes). Skipping transcription.")
+            try:
+                await websocket.send_json({"error": "No speech detected.", "transcript": ""})
+            except (WebSocketDisconnect, RuntimeError):
+                pass
+            audio_chunks = []
+            first_byte_time = None
+            return
+
+        if not audio_chunks:
+            return
+
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp_audio:
+            for chunk in audio_chunks:
+                tmp_audio.write(chunk)
+            tmp_audio_path = tmp_audio.name
+        try:
+            from ordering_workflow import transcribe_audio
+            transcript, processed_audio_bytes, _ = await transcribe_audio(tmp_audio_path)
+            if transcript:
+                result = None
+                for attempt in range(3):
+                    try:
+                        result = await process_order_logic(transcript, table_id)
+                        break
+                    except Exception as classify_err:
+                        if "429" in str(classify_err) and attempt < 2:
+                            wait_time = (attempt + 1) * 3
+                            logging.warning(f"Rate limit 429 hit, retrying classify in {wait_time}s")
+                            await asyncio.sleep(wait_time)
+                        else:
+                            raise classify_err
+                if result:
+                    result["transcript"] = transcript
+                    try:
+                        await websocket.send_json(result)
+                    except (WebSocketDisconnect, RuntimeError) as e:
+                        logging.info(f"WS Client disconnected during result delivery: {e}")
+                        return
+
+                    try:
+                        tts_lang = result.get("language_code", "hi-IN")
+                        tts_text = result.get("response_text", "")
+                        if tts_text:
+                            speech_b64 = await generate_speech(tts_text, language_code=tts_lang)
+                            if speech_b64:
+                                await websocket.send_json({"type": "tts_audio", "speech": speech_b64})
+                    except (WebSocketDisconnect, RuntimeError):
+                        return
+                    except Exception as tts_err:
+                        print(f"TTS generation error: {tts_err}")
+                else:
+                    try:
+                        await websocket.send_json({"error": "Classification failed.", "transcript": transcript})
+                    except (WebSocketDisconnect, RuntimeError):
+                        return
+            else:
+                try:
+                    await websocket.send_json({"error": "No speech detected.", "transcript": ""})
+                except (WebSocketDisconnect, RuntimeError):
+                    return
+        except Exception as e:
+            logging.error(f"Processing error in WS: {e}")
+            print(f"Processing error in WS: {e}")
+            try:
+                await websocket.send_json({
+                    "classification": {},
+                    "response_text": f"Error: {e}",
+                    "is_finished": False,
+                    "transcript": "",
+                    "error": str(e)
+                })
+            except (WebSocketDisconnect, RuntimeError):
+                pass
+        finally:
+            from audio_utils import safe_remove
+            safe_remove(tmp_audio_path)
+            audio_chunks = []
+            first_byte_time = None
 
     try:
         while True:
             try:
                 message = await asyncio.wait_for(websocket.receive(), timeout=WS_IDLE_TIMEOUT)
             except asyncio.TimeoutError:
+                # Check cumulative recording duration
+                if first_byte_time is not None and audio_chunks:
+                    elapsed = time.monotonic() - first_byte_time
+                    if elapsed >= MAX_RECORDING_DURATION:
+                        print(f"Auto-processing audio after {elapsed:.0f}s (no stop received)")
+                        await process_accumulated_audio()
                 # Send a ping-equivalent (JSON keepalive) to keep proxy alive
                 try:
                     await websocket.send_json({"type": "keepalive"})
@@ -998,92 +1092,10 @@ async def ws_stream_audio(websocket: WebSocket, table_id: str = "default"):
                     data = json.loads(message["text"])
                     if data.get("action") == "start":
                         audio_chunks = []
+                        first_byte_time = None
                         table_id = data.get("table_id", table_id)
                     elif data.get("action") == "stop":
-                        total_bytes = sum(len(chunk) for chunk in audio_chunks)
-                        if total_bytes < 3000:
-                            print(f"DEBUG: Received audio is too short or empty ({total_bytes} bytes). Skipping transcription.")
-                            try:
-                                await websocket.send_json({"error": "No speech detected.", "transcript": ""})
-                            except (WebSocketDisconnect, RuntimeError):
-                                break
-                            audio_chunks = []
-                            continue
-
-                        if audio_chunks:
-                            import tempfile
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp_audio:
-                                for chunk in audio_chunks:
-                                    tmp_audio.write(chunk)
-                                tmp_audio_path = tmp_audio.name
-                            try:
-                                from ordering_workflow import transcribe_audio
-                                transcript, processed_audio_bytes, _ = await transcribe_audio(tmp_audio_path)
-                                if transcript:
-                                    result = None
-                                    for attempt in range(3):
-                                        try:
-                                            result = await process_order_logic(transcript, table_id)
-                                            break
-                                        except Exception as classify_err:
-                                            if "429" in str(classify_err) and attempt < 2:
-                                                wait_time = (attempt + 1) * 3
-                                                logging.warning(f"Rate limit 429 hit, retrying classify in {wait_time}s")
-                                                await asyncio.sleep(wait_time)
-                                            else:
-                                                raise classify_err
-                                    if result:
-                                        result["transcript"] = transcript
-                                        try:
-                                            await websocket.send_json(result)
-                                        except (WebSocketDisconnect, RuntimeError) as e:
-                                            logging.info(f"WS Client disconnected during result delivery: {e}")
-                                            break
-
-                                        try:
-                                            tts_lang = result.get("language_code", "hi-IN")
-                                            tts_text = result.get("response_text", "")
-                                            if tts_text:
-                                                speech_b64 = await generate_speech(tts_text, language_code=tts_lang)
-                                                if speech_b64:
-                                                    await websocket.send_json({"type": "tts_audio", "speech": speech_b64})
-                                        except (WebSocketDisconnect, RuntimeError):
-                                            break
-                                        except Exception as tts_err:
-                                            print(f"TTS generation error: {tts_err}")
-                                    else:
-                                        try:
-                                            await websocket.send_json({"error": "Classification failed.", "transcript": transcript})
-                                        except (WebSocketDisconnect, RuntimeError):
-                                            break
-                                else:
-                                    try:
-                                        await websocket.send_json({"error": "No speech detected.", "transcript": ""})
-                                    except (WebSocketDisconnect, RuntimeError):
-                                        break
-                            except Exception as e:
-                                logging.error(f"Processing error in WS: {e}")
-                                print(f"Processing error in WS: {e}")
-                                try:
-                                    await websocket.send_json({
-                                        "classification": {},
-                                        "response_text": f"Error: {e}",
-                                        "is_finished": False,
-                                        "transcript": "",
-                                        "error": str(e)
-                                    })
-                                except (WebSocketDisconnect, RuntimeError):
-                                    logging.warning("Could not send error response: Client likely disconnected.")
-                                    break
-                            finally:
-                                from audio_utils import safe_remove
-                                safe_remove(tmp_audio_path)
-                                audio_chunks = []
-                        else:
-                            try:
-                                await websocket.send_json({"error": "No audio chunks received"})
-                            except (WebSocketDisconnect, RuntimeError):
-                                break
+                        await process_accumulated_audio()
                 except json.JSONDecodeError:
                     logging.warning("WS received malformed JSON text")
                     continue
@@ -1091,6 +1103,8 @@ async def ws_stream_audio(websocket: WebSocket, table_id: str = "default"):
                     logging.error(f"WS text error: {e}")
                     print(f"WS text error: {e}")
             elif message.get("bytes") is not None:
+                if first_byte_time is None:
+                    first_byte_time = time.monotonic()
                 audio_chunks.append(message["bytes"])
     except WebSocketDisconnect:
         pass
