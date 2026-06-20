@@ -1,4 +1,8 @@
-import sounddevice as sd
+try:
+    import sounddevice as sd
+except (ImportError, OSError):
+    sd = None
+
 import numpy as np
 import scipy.io.wavfile as wavfile
 import os
@@ -11,6 +15,9 @@ def record_audio(filename, duration=None):
     Records audio from the local microphone. 
     If duration is None, records until interrupted (Ctrl+C).
     """
+    if sd is None:
+        raise RuntimeError("sounddevice / PortAudio is not available on this system. Audio recording cannot be initiated.")
+        
     fs = 16000  # Sample rate (standard for speech-to-text)
     channels = 1
     

@@ -1,3 +1,4 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
 sounddevice
 numpy
 scipy
@@ -7,7 +8,6 @@ sarvamai
 python-dotenv
 groq
 google-genai
-asyncio
 torch
 onnxruntime
 sentence-transformers
@@ -24,3 +24,4 @@ asyncpg>=0.29.0
 sqlalchemy[asyncio]>=2.0.32
 redis>=5.0.1
 alembic>=1.13.1
+
