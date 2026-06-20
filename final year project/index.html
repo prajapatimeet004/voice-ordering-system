@@ -1015,30 +1015,40 @@
         function onSpeechStart() {
             isSpeaking = true;
 
-            if (audioWs && audioWs.readyState === WebSocket.OPEN) {
-                audioWs.close();
+            // Close existing socket if any (open or connecting) and reset its callbacks
+            if (audioWs) {
+                try {
+                    audioWs.onopen = null;
+                    audioWs.onmessage = null;
+                    audioWs.onerror = null;
+                    audioWs.close();
+                } catch (e) {}
             }
 
             // Open WebSocket Connection
             let wsUrl = API_URL.replace("http", "ws");
             if (wsUrl === "file://") { wsUrl = "ws://127.0.0.1:8000"; }
 
-            audioWs = new WebSocket(`${wsUrl}/order/stream_audio`);
+            const ws = new WebSocket(`${wsUrl}/order/stream_audio`);
+            audioWs = ws;
 
-            audioWs.onopen = () => {
-                audioWs.send(JSON.stringify({ action: "start", table_id: currentTableId }));
+            ws.onopen = () => {
+                // Verify this socket is still the active one
+                if (audioWs !== ws) return;
+
+                ws.send(JSON.stringify({ action: "start", table_id: currentTableId }));
 
                 mediaRecorder = new MediaRecorder(micStream);
                 mediaRecorder.ondataavailable = e => {
-                    if (e.data.size > 0 && audioWs.readyState === WebSocket.OPEN) {
-                        audioWs.send(e.data); // Stream directly
+                    if (e.data.size > 0 && ws.readyState === WebSocket.OPEN) {
+                        ws.send(e.data); // Stream directly
                     }
                 };
                 // onstop must be set BEFORE start() so it's ready when stop() fires
                 mediaRecorder.onstop = () => {
                     console.log("MediaRecorder stopped, sending stop signal to server");
-                    if (audioWs && audioWs.readyState === WebSocket.OPEN) {
-                        audioWs.send(JSON.stringify({ action: "stop" }));
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ action: "stop" }));
                     } else {
                         // WS closed before stop — unlock VAD
                         console.warn("WS not open on onstop, unlocking VAD.");
@@ -1062,14 +1072,19 @@
             // Track pending result for TTS audio message
             let pendingResult = null;
 
-            audioWs.onmessage = (e) => {
+            ws.onmessage = (e) => {
+                // Verify this socket is still the active one
+                if (audioWs !== ws) return;
+
                 let cResult;
                 try { cResult = JSON.parse(e.data); } catch { return; }
 
                 // Helper to unlock VAD
-                const unlockVAD = () => { isProcessing = false;
+                const unlockVAD = () => { 
+                    isProcessing = false;
                     isSpeaking = false;
-                    setVADStatus('active'); };
+                    setVADStatus('active'); 
+                };
 
                 // Message 2: TTS audio arrived separately
                 if (cResult.type === "tts_audio" && cResult.speech) {
@@ -1120,7 +1135,10 @@
                 }
             };
 
-            audioWs.onerror = (err) => {
+            ws.onerror = (err) => {
+                // Verify this socket is still the active one
+                if (audioWs !== ws) return;
+
                 console.error("WS Error", err);
                 isProcessing = false;
                 setVADStatus('active');
