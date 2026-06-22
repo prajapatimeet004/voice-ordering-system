@@ -975,22 +975,35 @@
                 animFrameId = null; }
             if (silenceTimer) { clearTimeout(silenceTimer);
                 silenceTimer = null; }
-            // Close WebSocket FIRST so onstop handler won't find a stale open WS
-            if (audioWs) {
-                try {
-                    audioWs.onopen = null;
-                    audioWs.onmessage = null;
-                    audioWs.onerror = null;
-                    audioWs.onclose = null;
-                    audioWs.close();
-                } catch (e) {}
-                audioWs = null;
-            }
-            // THEN stop recorder — onstop will see audioWs=null and unlock VAD
+
+            // Stop MediaRecorder FIRST — onstop fires async and needs audioWs to send stop
             if (mediaRecorder && mediaRecorder.state === 'recording') {
                 console.log("[VAD] Stopping active MediaRecorder during stopVAD");
                 mediaRecorder.stop();
             }
+
+            // Defer WS cleanup — let onstop use audioWs, then close after it fires
+            if (audioWs) {
+                const ws = audioWs;
+                const cleanup = () => {
+                    cleanupAudioWs(ws);
+                    if (audioWs === ws) audioWs = null;
+                };
+                if (ws.readyState === WebSocket.CONNECTING) {
+                    let done = false;
+                    ws.addEventListener('open', () => {
+                        done = true;
+                        try { ws.send(JSON.stringify({ action: "stop" })); } catch (e) {}
+                        setTimeout(cleanup, 1500);
+                    }, { once: true });
+                    setTimeout(() => { if (!done) cleanup(); }, 5000);
+                } else if (ws.readyState === WebSocket.OPEN) {
+                    setTimeout(cleanup, 2000);
+                } else {
+                    cleanup();
+                }
+            }
+
             if (micStream) {
                 micStream.getTracks().forEach(t => t.stop());
                 console.log("[VAD] Microphone tracks stopped");
@@ -1093,9 +1106,14 @@
                     console.log("[WS] Sending stop signal to server");
                     audioWs.send(JSON.stringify({ action: "stop" }));
                 } else if (audioWs && audioWs.readyState === WebSocket.CONNECTING) {
-                    console.log("[WS] WS still connecting, will send stop once open");
+                    console.log("[WS] WS still connecting, will flush chunks + send stop once open");
                     audioWs.addEventListener('open', () => {
                         try {
+                            // Flush buffered audio chunks before stop signal
+                            for (const chunk of pendingChunks) {
+                                if (audioWs.readyState === WebSocket.OPEN) audioWs.send(chunk);
+                            }
+                            pendingChunks = [];
                             audioWs.send(JSON.stringify({ action: "stop" }));
                         } catch (e) {
                             console.warn("[WS] Failed to send stop on late open:", e);
