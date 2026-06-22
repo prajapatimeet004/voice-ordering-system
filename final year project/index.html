@@ -987,26 +987,11 @@
                 mediaRecorder.stop();
             }
 
-            // Defer WS cleanup — let onstop use audioWs, then close after it fires
-            if (audioWs) {
-                const ws = audioWs;
-                const cleanup = () => {
-                    cleanupAudioWs(ws);
-                    if (audioWs === ws) audioWs = null;
-                };
-                if (ws.readyState === WebSocket.CONNECTING) {
-                    let done = false;
-                    ws.addEventListener('open', () => {
-                        done = true;
-                        try { ws.send(JSON.stringify({ action: "stop" })); } catch (e) {}
-                        setTimeout(cleanup, 1500);
-                    }, { once: true });
-                    setTimeout(() => { if (!done) cleanup(); }, 5000);
-                } else if (ws.readyState === WebSocket.OPEN) {
-                    setTimeout(cleanup, 2000);
-                } else {
-                    cleanup();
-                }
+            // If we are not actively speaking or waiting for a response, clean up WS immediately.
+            // Otherwise, let the response arrive and clean it up in ws.onmessage / timeouts.
+            if (audioWs && !isSpeaking && !isProcessing) {
+                cleanupAudioWs(audioWs);
+                audioWs = null;
             }
 
             if (micStream) {
@@ -1060,6 +1045,14 @@
                 ws.onclose = null;
                 ws.close();
             } catch (e) {}
+        }
+
+        function checkAndCleanupWS() {
+            if (!vadActive && audioWs) {
+                console.log("[WS] VAD is inactive, cleaning up WebSocket after response");
+                cleanupAudioWs(audioWs);
+                audioWs = null;
+            }
         }
 
         function onSpeechStart() {
@@ -1237,6 +1230,7 @@
                     audio.onended = onAudioDone;
                     audio.onerror = onAudioDone;
                     audio.play().catch(onAudioDone);
+                    checkAndCleanupWS();
                     return;
                 }
 
@@ -1254,6 +1248,7 @@
                         replyEl.innerText = "Sorry, could not process that.";
                     }
                     unlockVAD();
+                    checkAndCleanupWS();
                     return;
                 }
 
@@ -1267,6 +1262,10 @@
                         alert("Order submitted successfully!");
                         location.reload();
                     }, 500);
+                }
+
+                if (!vadActive) {
+                    setTimeout(checkAndCleanupWS, 4000);
                 }
             };
 
@@ -1284,6 +1283,7 @@
                 setVADStatus('active');
                 transcriptEl.innerText = "Connection error. Tap mic to retry.";
                 replyEl.innerText = "Network issue. Please try again.";
+                checkAndCleanupWS();
             };
 
             ws.onclose = (event) => {
