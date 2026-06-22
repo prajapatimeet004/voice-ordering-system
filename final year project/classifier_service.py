@@ -1168,7 +1168,17 @@ Output: {
         # Each entry: (provider_name, client_getter, model, api_type, extra_kwargs)
         # api_type: "openai_compat" for OpenAI-compatible, "gemini" for Google GenAI
         providers = [
-            # OpenRouter models (primary)
+            # Direct Gemini API (extremely fast and reliable with local key)
+            ("Gemini:gemini-2.5-flash", None, "gemini-2.5-flash", "gemini", {}),
+            ("Gemini:gemini-2.0-flash", None, "gemini-2.0-flash", "gemini", {}),
+            ("Gemini:gemini-2.0-flash-lite", None, "gemini-2.0-flash-lite", "gemini", {}),
+            ("Gemini:gemini-1.5-flash", None, "gemini-1.5-flash", "gemini", {}),
+            # Cerebras models (fast inference)
+            ("Cerebras:gpt-oss-120b", get_cerebras_client, "gpt-oss-120b", "openai_compat", {}),
+            ("Cerebras:llama3.1-70b", get_cerebras_client, "llama3.1-70b", "openai_compat", {}),
+            # Groq (direct)
+            ("Groq:llama-3.3-70b-versatile", get_groq_client, "llama-3.3-70b-versatile", "openai_compat", {}),
+            # OpenRouter models (fallback)
             ("OpenRouter:gemini-2.5-flash", get_openrouter_client, "google/gemini-2.5-flash", "openai_compat", {}),
             ("OpenRouter:gemini-2.5-flash:free", get_openrouter_client, "google/gemini-2.5-flash:free", "openai_compat", {}),
             ("OpenRouter:gemini-2.0-flash:free", get_openrouter_client, "google/gemini-2.0-flash:free", "openai_compat", {}),
@@ -1177,15 +1187,6 @@ Output: {
             ("OpenRouter:mistral-small-24b:free", get_openrouter_client, "mistralai/mistral-small-24b-instruct-2501:free", "openai_compat", {}),
             ("OpenRouter:qwen-2.5-7b:free", get_openrouter_client, "qwen/qwen-2.5-7b-instruct:free", "openai_compat", {}),
             ("OpenRouter:phi-3-mini:free", get_openrouter_client, "microsoft/phi-3-mini-128k-instruct:free", "openai_compat", {}),
-            # Cerebras models (fast inference)
-            ("Cerebras:llama3.1-70b", get_cerebras_client, "llama3.1-70b", "openai_compat", {}),
-            ("Cerebras:gpt-oss-120b", get_cerebras_client, "gpt-oss-120b", "openai_compat", {}),
-            # Direct Gemini API (separate quota from OpenRouter)
-            ("Gemini:gemini-2.0-flash", None, "gemini-2.0-flash", "gemini", {}),
-            ("Gemini:gemini-2.0-flash-lite", None, "gemini-2.0-flash-lite", "gemini", {}),
-            ("Gemini:gemini-1.5-flash", None, "gemini-1.5-flash", "gemini", {}),
-            # Groq (last resort - rate limited)
-            ("Groq:llama-3.3-70b-versatile", get_groq_client, "llama-3.3-70b-versatile", "openai_compat", {}),
         ]
         
         text_content = None
