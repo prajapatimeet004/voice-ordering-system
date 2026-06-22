@@ -974,6 +974,7 @@ async def toggle_availability(dish_name: str = Form(...), available: bool = Form
 @app.websocket("/order/stream_audio")
 async def ws_stream_audio(websocket: WebSocket, table_id: str = "default"):
     await websocket.accept()
+    print("LOG: websocket connected")
     audio_chunks = []
     WS_IDLE_TIMEOUT = 120  # seconds — Render proxy idle timeout is ~60s, use 120
     MAX_RECORDING_DURATION = 45  # seconds — auto-process if no stop after this
@@ -982,12 +983,17 @@ async def ws_stream_audio(websocket: WebSocket, table_id: str = "default"):
     async def process_accumulated_audio():
         nonlocal audio_chunks, first_byte_time
         total_bytes = sum(len(chunk) for chunk in audio_chunks)
+        print(f"LOG: final accumulated audio size: {total_bytes} bytes before transcription")
+        if total_bytes < 10240:
+            print(f"WARNING: final accumulated audio size {total_bytes} bytes is less than 10KB")
+
         if total_bytes < 3000:
             print(f"DEBUG: Received audio is too short or empty ({total_bytes} bytes). Skipping transcription.")
             try:
                 await websocket.send_json({"error": "No speech detected.", "transcript": ""})
+                print("LOG: websocket response sent (too short error)")
             except (WebSocketDisconnect, RuntimeError):
-                pass
+                print("LOG: websocket closed (during send_json too short)")
             audio_chunks = []
             first_byte_time = None
             return
@@ -1002,14 +1008,21 @@ async def ws_stream_audio(websocket: WebSocket, table_id: str = "default"):
             tmp_audio_path = tmp_audio.name
         try:
             from ordering_workflow import transcribe_audio
+            print("LOG: transcription start")
             transcript, processed_audio_bytes, _ = await transcribe_audio(tmp_audio_path)
+            print(f"LOG: transcription finish. Transcript: '{transcript}'")
             if transcript:
                 result = None
                 for attempt in range(3):
                     try:
+                        print(f"LOG: LLM start (attempt {attempt + 1})")
                         result = await process_order_logic(transcript, table_id)
+                        print("LOG: LLM finish")
                         break
                     except Exception as classify_err:
+                        import traceback
+                        print(f"LOG: LLM exception during attempt {attempt + 1}:")
+                        traceback.print_exc()
                         if "429" in str(classify_err) and attempt < 2:
                             wait_time = (attempt + 1) * 3
                             logging.warning(f"Rate limit 429 hit, retrying classify in {wait_time}s")
@@ -1020,8 +1033,10 @@ async def ws_stream_audio(websocket: WebSocket, table_id: str = "default"):
                     result["transcript"] = transcript
                     try:
                         await websocket.send_json(result)
+                        print("LOG: websocket response sent (text result)")
                     except (WebSocketDisconnect, RuntimeError) as e:
                         logging.info(f"WS Client disconnected during result delivery: {e}")
+                        print(f"LOG: WS Client disconnected during result delivery: {e}")
                         return
 
                     try:
@@ -1031,23 +1046,34 @@ async def ws_stream_audio(websocket: WebSocket, table_id: str = "default"):
                             speech_b64 = await generate_speech(tts_text, language_code=tts_lang)
                             if speech_b64:
                                 await websocket.send_json({"type": "tts_audio", "speech": speech_b64})
-                    except (WebSocketDisconnect, RuntimeError):
+                                print("LOG: websocket response sent (tts_audio)")
+                    except (WebSocketDisconnect, RuntimeError) as e:
+                        print(f"LOG: WS Client disconnected during TTS delivery: {e}")
                         return
                     except Exception as tts_err:
+                        import traceback
+                        print("LOG: Exception during TTS generation:")
+                        traceback.print_exc()
                         print(f"TTS generation error: {tts_err}")
                 else:
                     try:
                         await websocket.send_json({"error": "Classification failed.", "transcript": transcript})
+                        print("LOG: websocket response sent (classification failed error)")
                     except (WebSocketDisconnect, RuntimeError):
+                        print("LOG: websocket closed (during classification failed error delivery)")
                         return
             else:
                 try:
                     await websocket.send_json({"error": "No speech detected.", "transcript": ""})
+                    print("LOG: websocket response sent (no speech detected error)")
                 except (WebSocketDisconnect, RuntimeError):
+                    print("LOG: websocket closed (during no speech detected error delivery)")
                     return
         except Exception as e:
+            import traceback
+            print("LOG: Exception after stop signal during processing:")
+            traceback.print_exc()
             logging.error(f"Processing error in WS: {e}")
-            print(f"Processing error in WS: {e}")
             try:
                 await websocket.send_json({
                     "classification": {},
@@ -1056,8 +1082,9 @@ async def ws_stream_audio(websocket: WebSocket, table_id: str = "default"):
                     "transcript": "",
                     "error": str(e)
                 })
+                print("LOG: websocket response sent (processing exception error)")
             except (WebSocketDisconnect, RuntimeError):
-                pass
+                print("LOG: websocket closed (during processing exception error delivery)")
         finally:
             from audio_utils import safe_remove
             safe_remove(tmp_audio_path)
@@ -1079,37 +1106,52 @@ async def ws_stream_audio(websocket: WebSocket, table_id: str = "default"):
                 try:
                     await websocket.send_json({"type": "keepalive"})
                 except (WebSocketDisconnect, RuntimeError):
+                    print("LOG: websocket closed (during keepalive ping failure)")
                     break
                 continue
 
             if message.get("type") == "websocket.disconnect":
                 logging.debug("WS Client disconnected.")
-                print("WS Client disconnected.")
+                print("LOG: websocket closed (received disconnect message)")
                 break
 
             if message.get("text") is not None:
+                print(f"LOG: websocket text message received: {message['text']}")
                 try:
                     data = json.loads(message["text"])
                     if data.get("action") == "start":
+                        print("LOG: start message received")
                         audio_chunks = []
                         first_byte_time = None
                         table_id = data.get("table_id", table_id)
                     elif data.get("action") == "stop":
+                        print("LOG: stop message received")
                         await process_accumulated_audio()
                 except json.JSONDecodeError:
                     logging.warning("WS received malformed JSON text")
+                    print("LOG: WS received malformed JSON text")
                     continue
                 except Exception as e:
+                    import traceback
+                    print("LOG: Exception during text message handling:")
+                    traceback.print_exc()
                     logging.error(f"WS text error: {e}")
-                    print(f"WS text error: {e}")
             elif message.get("bytes") is not None:
+                chunk = message["bytes"]
                 if first_byte_time is None:
                     first_byte_time = time.monotonic()
-                audio_chunks.append(message["bytes"])
+                audio_chunks.append(chunk)
+                total_bytes = sum(len(c) for c in audio_chunks)
+                print(f"LOG: audio chunk received. chunk size: {len(chunk)} bytes. total accumulated bytes: {total_bytes} bytes")
     except WebSocketDisconnect:
-        pass
+        print("LOG: websocket closed (WebSocketDisconnect)")
     except Exception as e:
+        import traceback
+        print("LOG: Exception in WS main loop:")
+        traceback.print_exc()
         logging.error(f"WS unexpected error: {e}")
+    finally:
+        print("LOG: websocket closed (main loop exit)")
 
 
 if __name__ == "__main__":
