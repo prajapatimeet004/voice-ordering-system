@@ -982,7 +982,8 @@
                 silenceTimer = null; }
 
             // Stop MediaRecorder FIRST — onstop fires async and needs audioWs to send stop
-            if (mediaRecorder && mediaRecorder.state === 'recording') {
+            const hasActiveRecorder = mediaRecorder && mediaRecorder.state === 'recording';
+            if (hasActiveRecorder) {
                 console.log("[VAD] Stopping active MediaRecorder during stopVAD");
                 mediaRecorder.stop();
             }
@@ -994,17 +995,15 @@
                 audioWs = null;
             }
 
-            if (micStream) {
-                micStream.getTracks().forEach(t => t.stop());
-                console.log("[VAD] Microphone tracks stopped");
+            // Only clean up mic immediately if we don't have an active recorder stopping asynchronously.
+            // If we do, the recorder's onstop handler will call cleanupMic().
+            if (!hasActiveRecorder) {
+                cleanupMic();
+                mediaRecorder = null;
             }
-            if (audioCtx) audioCtx.close();
-            micStream = null;
-            audioCtx = null;
-            analyser = null;
-            mediaRecorder = null;
+
             isSpeaking = false;
-            isProcessing = false;
+            isProcessing = hasActiveRecorder;
             document.getElementById('order-screen').classList.remove('recording');
             micBtn.classList.remove('vad-on');
             setVADStatus('off');
@@ -1055,6 +1054,19 @@
             }
         }
 
+        function cleanupMic() {
+            if (micStream) {
+                micStream.getTracks().forEach(t => t.stop());
+                console.log("[VAD] Microphone tracks stopped");
+            }
+            if (audioCtx) {
+                try { audioCtx.close(); } catch (e) {}
+            }
+            micStream = null;
+            audioCtx = null;
+            analyser = null;
+        }
+
         function onSpeechStart() {
             // Guard: validate micStream before proceeding
             if (!micStream || !(micStream instanceof MediaStream) || micStream.active === false) {
@@ -1100,6 +1112,12 @@
             mediaRecorder.onstop = () => {
                 console.log("[MR] MediaRecorder stopped");
                 recorderActive = false;
+
+                // Clean up mic if VAD was turned off
+                if (!vadActive) {
+                    cleanupMic();
+                }
+
                 if (audioWs && audioWs.readyState === WebSocket.OPEN) {
                     console.log("[WS] Sending stop signal to server");
                     audioWs.send(JSON.stringify({ action: "stop" }));
@@ -1123,6 +1141,7 @@
                     isSpeaking = false;
                     setVADStatus('active');
                 }
+                mediaRecorder = null;
             };
 
             // Start recorder with 100ms timeslices
@@ -1321,7 +1340,6 @@
                 try { mediaRecorder.requestData(); } catch (e) {}
                 console.log("[MR] Stopping MediaRecorder");
                 mediaRecorder.stop();
-                mediaRecorder = null;
             } else if (audioWs && audioWs.readyState === WebSocket.OPEN) {
                 console.log("[WS] No active recorder, sending stop directly");
                 audioWs.send(JSON.stringify({ action: "stop" }));
