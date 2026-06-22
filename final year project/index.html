@@ -821,6 +821,7 @@
 
         // ─── VAD Runtime State ──────────────────────────────────────────
         let vadActive = false; // VAD toggle (mic btn tap)
+        let isInitializingMic = false; // Guard for microphone initialization
         let isProcessing = false; // locked while API is in-flight or TTS playing
         let isSpeaking = false; // currently recording a speech chunk
         let silenceTimer = null;
@@ -941,7 +942,8 @@
 
         // ─── VAD Core ─────────────────────────────────────────────────────
         async function initVAD() {
-            if (vadActive) return;
+            if (vadActive || isInitializingMic) return;
+            isInitializingMic = true;
             try {
                 console.log("[VAD] Requesting microphone access...");
                 const constraints = {
@@ -965,6 +967,9 @@
                 console.error("[VAD] Microphone access denied:", err.message);
                 alert("Microphone access denied. VAD requires mic permission.");
                 vadActive = false;
+                setVADStatus('off');
+            } finally {
+                isInitializingMic = false;
             }
         }
 
@@ -1142,9 +1147,9 @@
             // Open WebSocket Connection
             let wsUrl = API_URL.replace("http", "ws");
             if (wsUrl === "file://") { wsUrl = "ws://127.0.0.1:8000"; }
-
-            console.log("[WS] Connecting to", `${wsUrl}/order/stream_audio`);
-            const ws = new WebSocket(`${wsUrl}/order/stream_audio`);
+            const wsEndpoint = wsUrl.replace(/\/$/, "") + "/order/stream_audio";
+            console.log("[WS] Connecting to", wsEndpoint);
+            const ws = new WebSocket(wsEndpoint);
             audioWs = ws;
 
             // Max recording duration: force-stop after 30s even if VAD doesn't detect silence
@@ -1393,8 +1398,10 @@
 
         // ─── Mic Button = VAD Toggle ──────────────────────────────────────
         micBtn.onclick = async () => {
+            if (isInitializingMic) return;
             if (!vadActive) {
                 console.log("[UI] Mic button clicked, starting VAD");
+                micLabel.innerText = 'INITIALIZING...';
                 await initVAD();
                 if (vadActive) {
                     micBtn.classList.add('vad-on');
@@ -1410,6 +1417,9 @@
 
         // ─── VAD UI Status Helper ─────────────────────────────────────────
         function setVADStatus(state) {
+            if (!vadActive) {
+                state = 'off';
+            }
             vadStatusEl.className = 'vad-status';
             switch (state) {
                 case 'active':
