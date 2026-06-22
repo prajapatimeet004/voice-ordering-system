@@ -8,6 +8,7 @@ reproduce_*.py
 debug_*.py
 final_verify_*.py
 *.wav
+*.webm
 *.log
 walkthrough.md
 *.zip

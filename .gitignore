@@ -14,6 +14,8 @@ api keys.txt
 # Audio / Temp
 *.wav
 *.mp3
+*.webm
+*.log
 temp_audio/
 logs/
 
@@ -27,3 +29,8 @@ logs/
 *.zip
 node_modules/
 walkthrough.md
+test_*.py
+verify_*.py
+reproduce_*.py
+debug_*.py
+final_verify_*.py
