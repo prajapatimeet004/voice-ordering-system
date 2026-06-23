@@ -1,0 +1,33 @@
+model_list:
+  - model_name: order-classifier
+    litellm_params:
+      model: groq/llama-3.3-70b-versatile
+      api_key: "os.environ/GROQ_API_KEY"
+      order: 1
+  - model_name: order-classifier
+    litellm_params:
+      model: cerebras/llama3.1-70b
+      api_key: "os.environ/CEREBRAS_API_KEY"
+      order: 2
+  - model_name: order-classifier
+    litellm_params:
+      model: openrouter/google/gemini-2.5-flash
+      api_key: "os.environ/OPENROUTER_API_KEY"
+      order: 3
+  - model_name: order-classifier
+    litellm_params:
+      model: openrouter/meta-llama/llama-3.3-70b-instruct:free
+      api_key: "os.environ/OPENROUTER_API_KEY"
+      order: 4
+      # Free-tier models may reject response_format at the infra level;
+      # drop_params silently removes it rather than raising an error.
+      drop_params: true
+  - model_name: order-classifier
+    litellm_params:
+      model: gemini/gemini-2.0-flash
+      api_key: "os.environ/GEMINI_API_KEY"
+      order: 5
+
+router_settings:
+  routing_strategy: least-busy
+  num_retries: 3

@@ -1,12 +1,14 @@
 import os
 import asyncio
 import time
+import httpx
 from dotenv import load_dotenv
 from audio_utils import trim_silence, safe_remove
 # from sarvamai import AsyncSarvamAI # Lazy import
 
 load_dotenv()
 API_KEY = os.getenv("SARVAM_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 if not API_KEY:
     raise ValueError("❌ SARVAM_API_KEY not found in .env")
@@ -30,9 +32,43 @@ async def close_client():
     if _sarvam_client and hasattr(_sarvam_client, '_client') and _sarvam_client._client:
         await _sarvam_client._client.aclose()
 
+async def _transcribe_whisper(wav_filename: str) -> str:
+    """
+    Fallback: transcribe audio using OpenAI Whisper API (whisper-1).
+    Returns the transcript text, or empty string on failure.
+    """
+    if not OPENAI_API_KEY:
+        print("DEBUG: [STT] OPENAI_API_KEY not set — cannot use Whisper fallback.")
+        return ""
+
+    try:
+        print("DEBUG: [STT] Attempting OpenAI Whisper fallback...")
+        with open(wav_filename, "rb") as f:
+            audio_bytes = f.read()
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "https://api.openai.com/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
+                files={"file": ("audio.wav", audio_bytes, "audio/wav")},
+                data={"model": "whisper-1", "language": "hi"}
+            )
+
+        if response.status_code == 200:
+            transcript = response.json().get("text", "").strip()
+            print(f"DEBUG: [STT] Whisper succeeded: '{transcript}'")
+            return transcript
+        else:
+            print(f"ERROR: [STT] Whisper API returned {response.status_code}: {response.text}")
+            return ""
+    except Exception as e:
+        print(f"ERROR: [STT] Whisper fallback exception: {e}")
+        return ""
+
 async def transcribe_chunk(wav_filename, orders_dict, current_table, processed_audio_list=None):
     """
     Transcribes a single audio chunk by sending it directly to the Sarvam API.
+    Falls back to OpenAI Whisper if all Sarvam retries fail.
     Silero VAD (trim_silence) is intentionally skipped here because:
     1. The browser already performs VAD — only speech segments are sent.
     2. torchaudio/torio segfaults on this machine when loading FFmpeg extensions.
@@ -49,11 +85,12 @@ async def transcribe_chunk(wav_filename, orders_dict, current_table, processed_a
 
         client = get_sarvam_client()
         
-        # Simple retry logic for transient network issues
+        # ── 1. Try Sarvam AI with retry/backoff ──
         max_retries = 3
         retry_delay = 1
         transcript_text = ""
-        
+        sarvam_failed = False
+
         for attempt in range(max_retries):
             try:
                 with open(wav_filename, "rb") as f:
@@ -64,15 +101,21 @@ async def transcribe_chunk(wav_filename, orders_dict, current_table, processed_a
                     )
                 transcript_text = getattr(response, "transcript", "")
                 print(f"DEBUG: Sarvam API response transcript: '{transcript_text}'")
-                break # Success
+                break  # Success — exit retry loop
             except Exception as req_err:
                 if attempt < max_retries - 1:
                     print(f"DEBUG: Transcription attempt {attempt+1} failed ({req_err}). Retrying in {retry_delay}s...")
                     await asyncio.sleep(retry_delay)
-                    retry_delay *= 2 # Exponential backoff
+                    retry_delay *= 2  # Exponential backoff
                 else:
-                    raise req_err # Re-raise if all retries fail
-        
+                    print(f"ERROR: All {max_retries} Sarvam retries exhausted: {req_err}")
+                    sarvam_failed = True
+
+        # ── 2. Whisper fallback if Sarvam failed ──
+        if sarvam_failed:
+            transcript_text = await _transcribe_whisper(wav_filename)
+
+        # ── 3. Update shared order state ──
         if transcript_text.strip():
             orders_dict[current_table]["segments"].append({
                 "text": transcript_text
@@ -87,3 +130,4 @@ async def transcribe_chunk(wav_filename, orders_dict, current_table, processed_a
     finally:
         if os.path.exists(wav_filename):
             safe_remove(wav_filename)
+

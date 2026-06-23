@@ -6,6 +6,14 @@ import datetime
 from dotenv import load_dotenv
 from rapidfuzz import process, fuzz
 import asyncio
+import yaml
+import litellm
+from litellm import Router
+
+litellm.set_verbose = False
+# Silently drop params (e.g. response_format) for providers that don't support them
+# instead of raising an error and breaking the whole router call.
+litellm.drop_params = True
 
 # ─── Token Usage Logger ───────────────────────────────────────────────────────
 _LOG_DIR = os.path.join(os.path.dirname(__file__), "logs")
@@ -31,7 +39,6 @@ def log_token_usage(transcript: str, input_tokens: int, output_tokens: int, late
 
 load_dotenv(override=True)
 import inventory_service
-from groq import AsyncGroq
 
 # Load Menu Data for Validation
 MENU_FILE = os.path.join(os.path.dirname(__file__), "menu.json")
@@ -43,78 +50,15 @@ def load_menu_data():
 
 MENU_DATA = load_menu_data()
 
+# Initialize LiteLLM router once at module level by loading litellm_config.yaml
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), "litellm_config.yaml")
+with open(CONFIG_PATH, "r") as f:
+    config_data = yaml.safe_load(f)
 
-
-GROQ_API_KEY = os.getenv("GROQ_API_KEY") 
-SARVAM_API_KEY = os.getenv("SARVAM_API_KEY") or "sk_gryfenq9_2CYOHCGaYJFAWf8VYpbPA959"
-
-_llm_client = None
-
-def get_llm_client():
-    global _llm_client
-    if _llm_client is None:
-        from openai import OpenAI
-        # Use Sarvam AI as the primary text model
-        _llm_client = OpenAI(
-            base_url="https://api.sarvam.ai/v1",
-            api_key=SARVAM_API_KEY
-        )
-    return _llm_client
-
-_cerebras_client = None
-
-def get_cerebras_client():
-    global _cerebras_client
-    if _cerebras_client is None:
-        from openai import AsyncOpenAI
-        CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")
-        _cerebras_client = AsyncOpenAI(
-            base_url="https://api.cerebras.ai/v1",
-            api_key=CEREBRAS_API_KEY
-        )
-    return _cerebras_client
-
-_groq_client = None
-
-def get_groq_client():
-    global _groq_client
-    if _groq_client is None:
-        from groq import AsyncGroq
-        GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-        _groq_client = AsyncGroq(api_key=GROQ_API_KEY)
-    return _groq_client
-
-
-
-
-_gemini_model = None
-
-def get_gemini_model():
-    """Fallback Gemini model if needed."""
-    global _gemini_model
-    if _gemini_model is None:
-        from google import genai
-        GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-        _gemini_model = genai.Client(api_key=GEMINI_API_KEY)
-    return _gemini_model
-
-_openrouter_client = None
-
-def get_openrouter_client():
-    """Client for OpenRouter (Gemma models)."""
-    global _openrouter_client
-    if _openrouter_client is None:
-        from openai import AsyncOpenAI
-        OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-        _openrouter_client = AsyncOpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=OPENROUTER_API_KEY,
-            default_headers={
-                "HTTP-Referer": "https://petpooja.com", # Optional, for OpenRouter analytics
-                "X-Title": "Voice Ordering System",
-            }
-        )
-    return _openrouter_client
+router = Router(
+    model_list=config_data.get("model_list", []),
+    **config_data.get("router_settings", {})
+)
 
 def extract_json(text):
     """
@@ -740,7 +684,7 @@ async def classify_order(transcript: str, current_order_summary: str = "Order is
     if not transcript or not transcript.strip():
         return {}
 
-    client = get_llm_client()
+
     # Fetch current inventory status to inform the LLM
     inventory_summary = inventory_service.get_inventory_summary()
 
@@ -1146,7 +1090,6 @@ Output: {
     # Estimate tokens added by hints
     hint_tokens = 0
     
-    client = get_cerebras_client()
     preprocessed_text = preprocess_transcript(transcript)
     
     final_order_result = {
@@ -1164,81 +1107,20 @@ Output: {
         # Start Timing the LLM Call
         start_llm_time = time.perf_counter()
         
-        # ── Provider Fallback Chain ──
-        # Each entry: (provider_name, client_getter, model, api_type, extra_kwargs)
-        # api_type: "openai_compat" for OpenAI-compatible, "gemini" for Google GenAI
-        providers = [
-            # Direct Gemini API (extremely fast and reliable with local key)
-            ("Gemini:gemini-2.5-flash", None, "gemini-2.5-flash", "gemini", {}),
-            ("Gemini:gemini-2.0-flash", None, "gemini-2.0-flash", "gemini", {}),
-            ("Gemini:gemini-2.0-flash-lite", None, "gemini-2.0-flash-lite", "gemini", {}),
-            ("Gemini:gemini-1.5-flash", None, "gemini-1.5-flash", "gemini", {}),
-            # Cerebras models (fast inference)
-            ("Cerebras:gpt-oss-120b", get_cerebras_client, "gpt-oss-120b", "openai_compat", {}),
-            ("Cerebras:llama3.1-70b", get_cerebras_client, "llama3.1-70b", "openai_compat", {}),
-            # Groq (direct)
-            ("Groq:llama-3.3-70b-versatile", get_groq_client, "llama-3.3-70b-versatile", "openai_compat", {}),
-            # OpenRouter models (fallback)
-            ("OpenRouter:gemini-2.5-flash", get_openrouter_client, "google/gemini-2.5-flash", "openai_compat", {}),
-            ("OpenRouter:gemini-2.5-flash:free", get_openrouter_client, "google/gemini-2.5-flash:free", "openai_compat", {}),
-            ("OpenRouter:gemini-2.0-flash:free", get_openrouter_client, "google/gemini-2.0-flash:free", "openai_compat", {}),
-            ("OpenRouter:llama-3.3-70b-instruct:free", get_openrouter_client, "meta-llama/llama-3.3-70b-instruct:free", "openai_compat", {}),
-            ("OpenRouter:deepseek-r1:free", get_openrouter_client, "deepseek/deepseek-r1:free", "openai_compat", {}),
-            ("OpenRouter:mistral-small-24b:free", get_openrouter_client, "mistralai/mistral-small-24b-instruct-2501:free", "openai_compat", {}),
-            ("OpenRouter:qwen-2.5-7b:free", get_openrouter_client, "qwen/qwen-2.5-7b-instruct:free", "openai_compat", {}),
-            ("OpenRouter:phi-3-mini:free", get_openrouter_client, "microsoft/phi-3-mini-128k-instruct:free", "openai_compat", {}),
-        ]
-        
-        text_content = None
-        prompt_tokens = 0
-        completion_tokens = 0
-        last_error = None
-        
-        for provider_name, client_getter, model, api_type, extra_kwargs in providers:
-            try:
-                print(f"DEBUG: Trying {provider_name}...")
-                
-                if api_type == "openai_compat":
-                    client = client_getter()
-                    completion = await client.chat.completions.create(
-                        model=model,
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": f"{hint_prompt}Current Order Summary: {current_order_summary}\n\nUser Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}"}
-                        ],
-                        response_format={"type": "json_object"},
-                        temperature=0.1,
-                        max_tokens=400,
-                        **extra_kwargs
-                    )
-                    text_content = completion.choices[0].message.content
-                    prompt_tokens = completion.usage.prompt_tokens
-                    completion_tokens = completion.usage.completion_tokens
-                    
-                elif api_type == "gemini":
-                    from google import genai
-                    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-                    gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-                    response = gemini_client.models.generate_content(
-                        model=model,
-                        contents=f"{system_prompt}\n\n{hint_prompt}Current Order Summary: {current_order_summary}\n\nUser Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}",
-                        config={"response_mime_type": "application/json", "temperature": 0.1, "max_output_tokens": 400}
-                    )
-                    text_content = response.text
-                    # Estimate tokens (Gemini doesn't return usage in same format)
-                    prompt_tokens = len(system_prompt) // 4 + len(transcript) // 4 + 100
-                    completion_tokens = len(text_content) // 4
-                
-                print(f"DEBUG: {provider_name} succeeded!")
-                break
-                
-            except Exception as e:
-                last_error = e
-                print(f"DEBUG: {provider_name} failed: {e}")
-                continue
-        
-        if text_content is None:
-            raise Exception(f"All LLM providers failed. Last error: {last_error}")
+        # Single litellm/router call using model "order-classifier"
+        completion = await router.acompletion(
+            model="order-classifier",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"{hint_prompt}Current Order Summary: {current_order_summary}\n\nUser Order:\nOriginal: {transcript}\nPreprocessed: {preprocessed_text}"}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.1,
+            max_tokens=400
+        )
+        text_content = completion.choices[0].message.content
+        prompt_tokens = completion.usage.prompt_tokens if completion.usage else 0
+        completion_tokens = completion.usage.completion_tokens if completion.usage else 0
         
         total_llm_time = (time.perf_counter() - start_llm_time) * 1000
         
@@ -1409,17 +1291,16 @@ def refine_addons_with_llm(dish_name: str, current_addons: list, new_transcript:
     """
     
     try:
-        from google.genai import types
-        response = get_gemini_model().models.generate_content(
-            model='gemini-1.5-flash-latest',
-            contents=f"New Request for {dish_name}:\n{new_transcript}",
-            config=types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                response_mime_type='application/json',
-                temperature=0.0
-            )
+        response = router.completion(
+            model='order-classifier',
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"New Request for {dish_name}:\n{new_transcript}"}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.0
         )
-        data = json.loads(response.text)
+        data = json.loads(response.choices[0].message.content)
         return data.get("updated_addons", current_addons)
     except Exception as e:
         print(f"ERROR in refine_addons_with_llm: {e}")
